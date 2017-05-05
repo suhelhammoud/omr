@@ -9,6 +9,29 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
+
+class Section:
+    """region"""
+
+    def __init__(self, x0, y0, x1, y1):
+        self.x0 = x0
+        self.y0 = y0
+        self.x1 = x1
+        self.y1 = y1
+
+    def crop(self, img):
+        return img[self.y0: self.y1, self.x0: self.x1]
+
+class OmrConf:
+    sec_name = Section(240, 25, 470, 270)
+    sec_type = Section(470, 25, 550, 200)
+    sec_answers = Section(15, 260, 500, 1270)
+    sec_one = Section(15, 260, 265, 1270)
+    sec_two = Section(260, 260, 500, 1270)
+
+    rshape = [1000, 1366]
+
+
 class V:
     top_left = "top_left"
     top_right = "top_right"
@@ -439,35 +462,47 @@ def law_of_cosines(a, x, b):
     # pAngle = np.degrees(angle)
 
 
-def transform(img, vertices, width, height, show=False):
+def transform(img, vertices, shape, show=False):
     # pts1 = np.float32([[top_left], [top_right], [bottom_left], [bottom_right]])
     # pts1 = np.float32([[71, 81], [491, 68], [35, 515], [520, 520]])
     pts1 = np.float32([vertices[V.top_left], vertices[V.top_right],
                        vertices[V.bottom_left], vertices[V.bottom_right]])
 
     # pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
-    pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
+    pts2 = np.float32([[0, 0], [shape[0], 0], [0, shape[1]], shape])
 
     M = cv2.getPerspectiveTransform(pts1, pts2)
 
     # dst = cv2.warpPerspective(img, M, (output width, height))
-    dst = cv2.warpPerspective(img, M, (width, height))
+    dst = cv2.warpPerspective(img, M, tuple(shape))
 
     if show:
         plt.subplot(121), plt.imshow(img, 'gray'), plt.title('Input')
         plt.subplot(122), plt.imshow(dst, 'gray'), plt.title('Output')
         plt.show()
+    return dst
 
 
 if __name__ == '__main__':
-    img = cv2.imread('../data/in/02.jpg', 0)
+    conf = OmrConf
+    img = cv2.imread('../data/in/06.jpg', 0)
     # plt.imshow(img, 'gray')
     # plt.show()
     height, width = img.shape
     logger.debug("height %s, width %s", height, width)
 
     vertices = get_four_corners(img)
-    transform(img, vertices, width, height, True)
+    sheet = transform(img, vertices, OmrConf.rshape, False)
+    sheet_name = conf.sec_name.crop(sheet)
+    sheet_type = conf.sec_type.crop(sheet)
+    sheet_one = conf.sec_one.crop(sheet)
+
+    plt.subplot(231), plt.imshow(img, 'gray'), plt.title('Input')
+    plt.subplot(232), plt.imshow(sheet, 'gray'), plt.title('Sheet')
+    plt.subplot(233), plt.imshow(sheet_name, 'gray'), plt.title('Name')
+    plt.subplot(234), plt.imshow(sheet_type, 'gray'), plt.title('type')
+    plt.subplot(235), plt.imshow(sheet_one, 'gray'), plt.title('one')
+    plt.show()
     # border(img)
     # img_filtered = pre_filters(img)
     # findCorners(img_filtered)
