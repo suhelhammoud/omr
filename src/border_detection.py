@@ -155,7 +155,7 @@ def process_side(x, y, center_x, side="left"):
 
 def distance(a, b, p):
     """ segment line AB, point P, where each one is an array([x, y]) """
-    if all(a == p) or all(b == p): # TODO delete this check if it takes time
+    if all(a == p) or all(b == p):  # TODO delete this check if it takes time
         return 0
     return norm(np.cross(b - a, a - p)) / norm(b - a)
 
@@ -170,8 +170,6 @@ def get_corner(x, y):
     # logger.debug("corner distan = %s", distances)
     mx_index = np.argmax(distances)
     return x[mx_index], y[mx_index]
-
-
 
 
 def get_four_corners(img):
@@ -195,7 +193,7 @@ def get_four_corners(img):
 
     four_points = merge_results(l_result, r_result)
     print(four_points)
-
+    return four_points
 
     # three_points = EDGE.get_three_points(left_side, ynz)
     # logger.debug('three_points = %s', three_points)
@@ -238,7 +236,6 @@ def pre_filters(img):
 
     dilate = th3
     return dilate
-
 
 
 def border(img):
@@ -405,6 +402,7 @@ def findCorners(img):
 
     return (xx, scan_x, scan_xr, xy, scan_y, scan_yr)
 
+
 def merge_results(left, right):
     result = {}
     result.update(left)
@@ -414,7 +412,6 @@ def merge_results(left, right):
     result[V.top_right] = right[V.top_right]
     result[V.bottom_right] = right[V.bottom_right]
     return result
-
 
 
 def foo(x_nz, scan_x_nz):
@@ -442,13 +439,36 @@ def law_of_cosines(a, x, b):
     # pAngle = np.degrees(angle)
 
 
+def transform(img, vertices, width, height, show=False):
+    # pts1 = np.float32([[top_left], [top_right], [bottom_left], [bottom_right]])
+    # pts1 = np.float32([[71, 81], [491, 68], [35, 515], [520, 520]])
+    pts1 = np.float32([vertices[V.top_left], vertices[V.top_right],
+                       vertices[V.bottom_left], vertices[V.bottom_right]])
+
+    # pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
+    pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
+
+    M = cv2.getPerspectiveTransform(pts1, pts2)
+
+    # dst = cv2.warpPerspective(img, M, (output width, height))
+    dst = cv2.warpPerspective(img, M, (width, height))
+
+    if show:
+        plt.subplot(121), plt.imshow(img, 'gray'), plt.title('Input')
+        plt.subplot(122), plt.imshow(dst, 'gray'), plt.title('Output')
+        plt.show()
+
+
 if __name__ == '__main__':
-    img = cv2.imread('../data/in/01.jpg', 0)
+    img = cv2.imread('../data/in/02.jpg', 0)
+    # plt.imshow(img, 'gray')
+    # plt.show()
     height, width = img.shape
     logger.debug("height %s, width %s", height, width)
 
-    get_four_corners(img)
-    border(img)
+    vertices = get_four_corners(img)
+    transform(img, vertices, width, height, True)
+    # border(img)
     # img_filtered = pre_filters(img)
     # findCorners(img_filtered)
     # print('done')

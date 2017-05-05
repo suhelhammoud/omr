@@ -3,6 +3,7 @@ import numpy as np
 from pyimagesearch import imutils
 from pyimagesearch.transform import four_point_transform
 # from skimage.filters import threshold_adaptive
+from matplotlib import pyplot as plt
 
 
 class Section:
@@ -107,6 +108,13 @@ def scan(image):
         # cv2.imwrite("data/out/next.jpg", wraped_2)
 
 
+def show(img):
+    from matplotlib import pyplot as plt
+    plt.imshow(img)
+    plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+    plt.show()
+
+
 def process(image_file):
     sec_name = Section(240, 25, 470, 270)
     sec_type = Section(470, 25, 550, 200)
@@ -115,13 +123,12 @@ def process(image_file):
     sec_two = Section(260, 260, 500, 1270)
 
     img = cv2.imread(image_file)
+    show(img)
     image = scan(img)
     if image is None:
         print("could not process image " + image_file)
         return
-    # cv2.imshow("done", image)
-    # cv2.waitKey(0)
-
+    show(image)
 
     cv2.imwrite("data/out/sections/sec_all.jpg", image)
     saveRegions(image, sec_name, "sec_name.jpg")
@@ -155,7 +162,8 @@ def edg(img):
 
 
 if __name__ == '__main__':
-    process('data/in/03.jpg')
+
+    process('/home/suhel/PycharmProjects/omr/data/in/03.jpg')
 
     # img = cv2.imread("data/out/next.jpg")
     # edg( img)

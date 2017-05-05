@@ -69,7 +69,7 @@ def forrieh(img):
 
 
 if __name__ == '__main__':
-    img = cv2.imread('data/out/sections/sec_name.jpg', cv2.COLOR_BGR2GRAY)
+    img = cv2.imread('../data/out/sections/sec_name.jpg', cv2.COLOR_BGR2GRAY)
 
     forrieh(img)
 

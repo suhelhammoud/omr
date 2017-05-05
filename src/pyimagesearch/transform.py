@@ -25,7 +25,7 @@ def order_points(pts):
 	# return the ordered coordinates
 	return rect
 
-def sudofour_point_transform(image, pts):
+def four_point_transform(image, pts):
 	# obtain a consistent order of the points and unpack them
 	# individually
 	rect = order_points(pts)

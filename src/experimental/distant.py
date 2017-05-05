@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 from matplotlib import pyplot as plt
 # from skimage.filters import threshold_adaptive
-from learn import detect, detect2
+from utils.learn import detect, detect2
 
 def applyMor(gray):
     kernel = np.ones((5, 5), np.uint8)

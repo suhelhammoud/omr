@@ -5,8 +5,7 @@ import time
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
-import lpf
-
+from lpf import *
 def url_to_image(url):
     # download the image, convert it to a NumPy array, and then read
     # it into OpenCV format

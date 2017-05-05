@@ -1,4 +1,4 @@
-from vertex_edge import Vertex, EDGE
+from experimental.vertex_edge import Vertex, EDGE
 
 import unittest
 
