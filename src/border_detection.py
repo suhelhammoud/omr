@@ -9,7 +9,6 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-
 class Section:
     """region"""
 
@@ -22,14 +21,21 @@ class Section:
     def crop(self, img):
         return img[self.y0: self.y1, self.x0: self.x1]
 
+
 class OmrConf:
+    rshape = [1000, 1500]
     sec_name = Section(240, 25, 470, 270)
     sec_type = Section(470, 25, 550, 200)
     sec_answers = Section(15, 260, 500, 1270)
     sec_one = Section(15, 260, 265, 1270)
     sec_two = Section(260, 260, 500, 1270)
 
-    rshape = [1000, 1366]
+    l_shift = 100
+    r_shift = 20
+    sec_marker = Section(0, 0, l_shift + r_shift, rshape[1])
+
+    y_step = 20
+    y_window = 100
 
 
 class V:
@@ -197,7 +203,9 @@ def get_corner(x, y):
 
 def get_four_corners(img):
     img_filtered = pre_filters(img)
-
+    # plt.subplot(121), plt.imshow(img, 'gray'), plt.title('Input')
+    # plt.subplot(122), plt.imshow(img_filtered, 'gray'), plt.title('Sheet')
+    # plt.show()
     y, x_left, x_right = get_page_vertical_sides(img_filtered)
     # logger.debug("y len = %s, data= %s ", len(y), y)
     # logger.debug("x_left len = %s, data= %s ", len(x_left), x_left)
@@ -250,11 +258,17 @@ def getSides(a):
     return xx, a0, a00, xy, a1, a11
 
 
+def marker_filter(img):
+    blur = cv2.medianBlur(img, 7, 0)
+    ret, th = cv2.threshold(blur, 127, 255, cv2.THRESH_BINARY)
+    return th
+
+
 def pre_filters(img):
     blur = cv2.medianBlur(img, 17, 0)
     ret3, th3 = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    kernel = np.ones((30, 30), np.uint8)
+    # kernel = np.ones((30, 30), np.uint8)
     # dilate = cv2.dilate(th3, kernel, iterations=1)
 
     dilate = th3
@@ -483,25 +497,145 @@ def transform(img, vertices, shape, show=False):
     return dst
 
 
+def add_shift(vertices, shift):
+    result = {key: value for key, value in vertices.items()}
+
+    x0, y0 = result[V.top_left]
+    result[V.top_left] = (x0 - shift, y0)
+
+    x1, y1 = result[V.bottom_left]
+    result[V.bottom_left] = (x1 - shift, y1)
+
+    return result
+
+
+def slide_marker(img, y_step, windows_y):
+    height, width = img.shape
+    for y in range(0, height, y_step):
+        yield (y, img[y:y + windows_y, 0:width])
+
+
+def smooth(x, window_len=100, window='flat'):
+    """smooth the data using a window with requested size.
+
+    This method is based on the convolution of a scaled window with the signal.
+    The signal is prepared by introducing reflected copies of the signal 
+    (with the window size) in both ends so that transient parts are minimized
+    in the begining and end part of the output signal.
+
+    input:
+        x: the input signal 
+        window_len: the dimension of the smoothing window; should be an odd integer
+        window: the type of window from 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
+            flat window will produce a moving average smoothing.
+
+    output:
+        the smoothed signal
+
+    example:
+
+    t=linspace(-2,2,0.1)
+    x=sin(t)+randn(len(t))*0.1
+    y=smooth(x)
+
+    see also: 
+
+    numpy.hanning, numpy.hamming, numpy.bartlett, numpy.blackman, numpy.convolve
+    scipy.signal.lfilter
+
+    TODO: the window parameter could be the window itself if an array instead of a string
+    NOTE: length(output) != length(input), to correct this: return y[(window_len/2-1):-(window_len/2)] instead of just y.
+    """
+
+    assert x.ndim == 1
+
+    assert x.size > window_len
+
+    if window_len < 3:
+        return x
+
+    assert window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']
+
+    s = np.r_[x[window_len - 1:0:-1], x, x[-2:-window_len - 1:-1]]
+    # print(len(s))
+    if window == 'flat':  # moving average
+        w = np.ones(window_len, 'd')
+    else:
+        w = eval('np.' + window + '(window_len)')
+
+    y = np.convolve(w / w.sum(), s, mode='valid')
+    # return y
+    return y[int(window_len / 2 - 1):-int(window_len / 2)-1]
+
+def get_markers(a, m_avg, spacing=0, threshold=None):
+    avg = np.average(a)
+    if threshold is None:
+        threshold = avg + spacing
+
+    a0 = a[:-1]
+    a0[0: 20] =  m_avg[0: 20] + 100
+    a1 = a[1:]
+
+    id_up = np.where((a0 < m_avg) & (a1 > m_avg))[0]
+    logger.debug("id_up = %s", len(id_up))
+
+    id_down = np.where((a0 > m_avg) & (a1 < m_avg))[0]
+
+    logger.debug("id_do = %s ",len(id_down))
+    return np.stack((id_up, id_down), axis=1)
+
+
 if __name__ == '__main__':
+    file_path = '../data/colored/6.jpg'
     conf = OmrConf
-    img = cv2.imread('../data/in/06.jpg', 0)
+    img = cv2.imread(file_path, 0)
     # plt.imshow(img, 'gray')
     # plt.show()
     height, width = img.shape
     logger.debug("height %s, width %s", height, width)
 
     vertices = get_four_corners(img)
-    sheet = transform(img, vertices, OmrConf.rshape, False)
+    v_shifted = add_shift(vertices, conf.l_shift)
+    sheet = transform(img, v_shifted, OmrConf.rshape, False)
+    # plt.subplot(121), plt.imshow(sheet, 'gray'), plt.title('Input')
+    # plt.subplot(122), plt.imshow(sheet, 'gray'), plt.title('Sheet')
+    # plt.show()
+    # cv2.imwrite('../data/out/sheet.jpg', sheet)
     sheet_name = conf.sec_name.crop(sheet)
     sheet_type = conf.sec_type.crop(sheet)
     sheet_one = conf.sec_one.crop(sheet)
+    sheet_marker = conf.sec_marker.crop(sheet)
+    sheet_marker = marker_filter(sheet_marker)
+
+    y_sum = sheet_marker.sum(1)
+    # y_avg = np.average(y_sum)
+
+    avg_smoothed = smooth(y_sum, window_len= 100,window='flat')
+    # print("avg = " + str(y_avg))
+    logger.debug("y_sum shape = %s ", y_sum.shape)
+    logger.debug("avg_s shape = %s ", avg_smoothed.shape)
+    markers = get_markers(y_sum, avg_smoothed, spacing= 90)
+
+    # for i in avg_smoothed:
+    #     print(i)
+
+    # for i in y_sum:
+    #     print(i)
+
+    # for yy, x_img in slide_marker(sheet_marker, conf.y_step, conf.y_window):
+    #     plt.imshow(x_img, 'gray'), plt.title(str(yy))
+    #     plt.show()
+
+    for y0, y1 in markers:
+        cv2.line(sheet, (0, y0), (width, y0), (0, 255, 255), 1)
+        cv2.line(sheet, (0, y1), (width, y1), (0, 0, 255), 1)
 
     plt.subplot(231), plt.imshow(img, 'gray'), plt.title('Input')
     plt.subplot(232), plt.imshow(sheet, 'gray'), plt.title('Sheet')
-    plt.subplot(233), plt.imshow(sheet_name, 'gray'), plt.title('Name')
-    plt.subplot(234), plt.imshow(sheet_type, 'gray'), plt.title('type')
-    plt.subplot(235), plt.imshow(sheet_one, 'gray'), plt.title('one')
+    plt.subplot(233), plt.imshow(sheet_marker, 'gray'), plt.title('sheet_marker')
+    plt.subplot(234), plt.imshow(sheet_name, 'gray'), plt.title('Name')
+    plt.subplot(235), plt.imshow(sheet_type, 'gray'), plt.title('type')
+    plt.subplot(236), plt.imshow(sheet_one, 'gray'), plt.title('one')
     plt.show()
     # border(img)
     # img_filtered = pre_filters(img)
