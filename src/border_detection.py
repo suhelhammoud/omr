@@ -4,38 +4,10 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 from numpy.linalg import norm
+from Configuration import OmrConfiguration as conf
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
-
-class Section:
-    """region"""
-
-    def __init__(self, x0, y0, x1, y1):
-        self.x0 = x0
-        self.y0 = y0
-        self.x1 = x1
-        self.y1 = y1
-
-    def crop(self, img):
-        return img[self.y0: self.y1, self.x0: self.x1]
-
-
-class OmrConf:
-    rshape = [1000, 1500]
-    sec_name = Section(240, 25, 470, 270)
-    sec_type = Section(470, 25, 550, 200)
-    sec_answers = Section(15, 260, 500, 1270)
-    sec_one = Section(15, 260, 265, 1270)
-    sec_two = Section(260, 260, 500, 1270)
-
-    l_shift = 100
-    r_shift = 20
-    sec_marker = Section(0, 0, l_shift + r_shift, rshape[1])
-
-    y_step = 20
-    y_window = 100
 
 
 class V:
@@ -259,7 +231,9 @@ def getSides(a):
 
 
 def marker_filter(img):
-    blur = cv2.medianBlur(img, 7, 0)
+    blurred = img
+    blurred = cv2.blur(img, (14, 1))
+    blur = cv2.medianBlur(blurred, conf.marker_filter_blur, 0)
     ret, th = cv2.threshold(blur, 127, 255, cv2.THRESH_BINARY)
     return th
 
@@ -515,7 +489,7 @@ def slide_marker(img, y_step, windows_y):
         yield (y, img[y:y + windows_y, 0:width])
 
 
-def smooth(x, window_len=100, window='flat'):
+def smooth(x, window_len=150, window='flat'):
     """smooth the data using a window with requested size.
 
     This method is based on the convolution of a scaled window with the signal.
@@ -565,38 +539,58 @@ def smooth(x, window_len=100, window='flat'):
 
     y = np.convolve(w / w.sum(), s, mode='valid')
     # return y
-    return y[int(window_len / 2 - 1):-int(window_len / 2)-1]
+    return y[int(window_len / 2 - 1):-int(window_len / 2) - 1]
 
-def get_markers(a, m_avg, spacing=0, threshold=None):
-    avg = np.average(a)
-    if threshold is None:
-        threshold = avg + spacing
 
+def filter_marker_y_padding(mrkr, padding, height):
+    assert height > padding
+    return mrkr[(mrkr > padding) & (mrkr < height - padding)]
+
+
+def get_markers(a, avg_smoothed, padding, spacing=3):
     a0 = a[:-1]
-    a0[0: 20] =  m_avg[0: 20] + 100
+    a0[0: padding] = avg_smoothed[0: padding]
     a1 = a[1:]
+    a1[-padding:-1] = avg_smoothed[-padding:-1]
 
-    id_up = np.where((a0 < m_avg) & (a1 > m_avg))[0]
+    a0 = smooth(a0, window_len=3)
+    a1 = smooth(a1, window_len=3)
+    id_up = np.where((a0 < (avg_smoothed - spacing)) & (a1 > avg_smoothed + spacing))[0]
+    logger.debug("id_up befor filtering = %s ", len(id_up))
+
+    id_up = filter_marker_y_padding(id_up, conf.marker_y_padding, len(a) - 1)
+    logger.debug("id_up after filtering = %s ", len(id_up))
+
     logger.debug("id_up = %s", len(id_up))
 
-    id_down = np.where((a0 > m_avg) & (a1 < m_avg))[0]
+    id_down = np.where((a0 > (avg_smoothed + spacing)) & (a1 < (avg_smoothed - spacing)))[0]
+    logger.debug("id_down befor filtering = %s ", len(id_down))
 
-    logger.debug("id_do = %s ",len(id_down))
+    id_down = filter_marker_y_padding(id_down, conf.marker_y_padding, len(a) - 1)
+    logger.debug("id_down after filtering = %s ", len(id_down))
+
+    logger.debug("id_do = %s ", len(id_down))
+    if len(id_up) != len(id_down):
+        logger.debug("in_up = %s", id_up)
+        logger.debug("in_down = %s", id_down)
+        return np.array([])
+
     return np.stack((id_up, id_down), axis=1)
 
 
 if __name__ == '__main__':
-    file_path = '../data/colored/6.jpg'
-    conf = OmrConf
+
+    file_path = '../data/colored/5.jpg'
     img = cv2.imread(file_path, 0)
     # plt.imshow(img, 'gray')
     # plt.show()
     height, width = img.shape
     logger.debug("height %s, width %s", height, width)
 
+
     vertices = get_four_corners(img)
     v_shifted = add_shift(vertices, conf.l_shift)
-    sheet = transform(img, v_shifted, OmrConf.rshape, False)
+    sheet = transform(img, v_shifted, conf.rshape, False)
     # plt.subplot(121), plt.imshow(sheet, 'gray'), plt.title('Input')
     # plt.subplot(122), plt.imshow(sheet, 'gray'), plt.title('Sheet')
     # plt.show()
@@ -610,11 +604,11 @@ if __name__ == '__main__':
     y_sum = sheet_marker.sum(1)
     # y_avg = np.average(y_sum)
 
-    avg_smoothed = smooth(y_sum, window_len= 100,window='flat')
+    avg_smoothed = smooth(y_sum, window_len=conf.marker_smooth_window, window='flat')
     # print("avg = " + str(y_avg))
     logger.debug("y_sum shape = %s ", y_sum.shape)
     logger.debug("avg_s shape = %s ", avg_smoothed.shape)
-    markers = get_markers(y_sum, avg_smoothed, spacing= 90)
+    markers = get_markers(y_sum, avg_smoothed, conf.marker_y_padding, conf.marker_spacing)
 
     # for i in avg_smoothed:
     #     print(i)
