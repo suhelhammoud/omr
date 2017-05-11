@@ -21,13 +21,14 @@ class OmrConfiguration:
     sec_answers = Section(15, 260, 500, 1270)
     sec_one = Section(15, 260, 265, 1270)
     sec_two = Section(260, 260, 500, 1270)
-    l_shift = 100
-    r_shift = 20
+    l_shift = 80
+    r_shift = 25
     sec_marker = Section(0, 0, l_shift + r_shift, rshape[1])
     y_step = 20
     y_window = 100
 
-    marker_filter_blur = 7
-    marker_y_padding = 50
+    marker_filter_blur = 5
+    marker_y_padding = 30
     marker_smooth_window = 150
-    marker_spacing = 2
+    marker_spacing = 1
+    marker_mx_height = 12 # TODO use in get+
