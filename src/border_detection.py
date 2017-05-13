@@ -5,6 +5,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from numpy.linalg import norm
 from Configuration import OmrConfiguration as conf
+import math
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ class V:
     top_right = "top_right"
     bottom_left = "bottom_left"
     bottom_right = "bottom_right"
+
 
 def get_page_vertical_sides(img):
     height, width = img.shape
@@ -53,7 +55,6 @@ def split_list(a_list):
 def process_side(x, y, center_x, side="left"):
     result = {}
     # middle_point = get_middle_point(x, y)
-
 
     x_top, x_bottom = split_list(x)
     y_top, y_bottom = split_list(y)
@@ -100,6 +101,67 @@ def process_side(x, y, center_x, side="left"):
 
     return result
 
+def process_side_distance(x, y, center_x, side="left"):
+    result = {}
+    # middle_point = get_middle_point(x, y)
+
+    x_top, x_bottom = split_list(x)
+    y_top, y_bottom = split_list(y)
+    # logger.debug("x_top = %s", x_top)
+    # logger.debug("y_top = %s", y_top)
+
+    # Process the upper side
+    if (x_top[0] - center_x) * (x_top[-1] - center_x) > 0:
+        a = np.array([center_x, y_top[0]])
+        b = np.array([x_top[-1], y_top[-1]])
+        corner = get_corner(x_top, y_top, a, b)
+        # logger.debug('xxx upper_corner = %s', corner)
+
+        # same side
+        if side == "left":
+            result[V.top_left] = corner
+        else:
+            result[V.top_right] = corner
+    else:  # cross sides
+        # TODO calculate both vertices using the corner method
+        corner = get_corner(x_top, y_top)
+        logger.debug("corner top = %s , side = %s", corner, side)
+        if side == "left":
+            result[V.top_right] = (x_top[0], y_top[0])
+            result[V.top_left] = corner
+        else:
+            result[V.top_left] = (x_top[0], y_top[0])
+            result[V.top_right] = corner
+
+    # logger.debug("x_bottom = %s", x_bottom)
+    # logger.debug("y_bottom = %s", y_bottom)
+
+    # Process the lower side
+    if (x_bottom[0] - center_x) * (x_bottom[-1] - center_x) > 0:
+        a = np.array([center_x, y_bottom[-1]])
+        b = np.array([x_bottom[0], y_bottom[0]])
+        corner = get_corner(x_bottom, y_bottom, a, b)
+        # logger.debug('xxx bottom_corner = %s', corner)
+
+        # same side
+        if side == "left":
+            result[V.bottom_left] = corner
+        else:
+            result[V.bottom_right] = corner
+    else:
+        # cross sides
+        # TODO calculate both vertices using the corner method
+        corner = get_corner(x_bottom, y_bottom)
+        logger.debug("corner bottom = %s , side = %s", corner, side)
+        if side == "left":
+            result[V.bottom_right] = (x_bottom[-1], y_bottom[-1])
+            result[V.bottom_left] = corner
+        else:
+            result[V.bottom_left] = (x_bottom[-1], y_bottom[-1])
+            result[V.bottom_right] = corner
+
+    return result
+
 
 def distance(a, b, p):
     """ segment line AB, point P, where each one is an array([x, y]) """
@@ -108,9 +170,11 @@ def distance(a, b, p):
     return norm(np.cross(b - a, a - p)) / norm(b - a)
 
 
-def get_corner(x, y):
-    a = np.array([x[0], y[0]])
-    b = np.array([x[-1], y[-1]])
+def get_corner(x, y, a = None, b = None):
+    if a is None:
+        a = np.array([x[0], y[0]])
+    if b is None:
+        b = np.array([x[-1], y[-1]])
     # logger.debug("a = %s, b = %s", a, b)
     points = np.column_stack((x, y))
     distances = [distance(a, b, p) for p in points]
@@ -134,11 +198,13 @@ def get_four_corners(img_filtered):
     logger.debug('center_x: %s, center_y: %s', center_x, center_y)
 
     logger.debug("processing left side")
-    l_result = process_side(x_left, y, center_x, side="left")
+    # l_result = process_side(x_left, y, center_x, side="left")
+    l_result = process_side_distance(x_left, y, center_x, side="left")
     logger.debug('left_side_corners = %s', l_result)
 
     logger.debug("processing right side")
-    r_result = process_side(x_right, y, center_x, side="right")
+    # r_result = process_side(x_right, y, center_x, side="right")
+    r_result = process_side_distance(x_right, y, center_x, side="right")
     logger.debug('right_side_corners = %s', r_result)
 
     four_points = merge_results(l_result, r_result)
@@ -208,10 +274,10 @@ def add_shift(vertices, shift):
     result = {key: value for key, value in vertices.items()}
 
     x0, y0 = result[V.top_left]
-    result[V.top_left] = (x0 - shift, y0)
+    result[V.top_left] = (x0 + shift, y0)
 
     x1, y1 = result[V.bottom_left]
-    result[V.bottom_left] = (x1 - shift, y1)
+    result[V.bottom_left] = (x1 + shift, y1)
 
     return result
 
@@ -222,24 +288,24 @@ def slide_marker(img, y_step, windows_y):
         yield (y, img[y:y + windows_y, 0:width])
 
 
-def filter_marker_y_padding(mrkr, padding, height):
-    assert height > padding
-    return mrkr[(mrkr > padding) & (mrkr < height - padding)]
+def filter_marker_y_padding(mrkr, padding_top, padding_bottom):
+    return mrkr[(mrkr > padding_top) & (mrkr < padding_bottom)]
 
 
 def get_markers(a, avg_smoothed, padding, spacing=3):
     a0 = a[:-1]
-    a0[0: padding] = avg_smoothed[0: padding]
+    # a0[0: padding] = avg_smoothed[0: padding]
     a1 = a[1:]
-    a1[-padding:-1] = avg_smoothed[-padding:-1]
+    # a1[-padding:-1] = avg_smoothed[-padding:-1]
 
-    a0 = smooth(a0, window_len=3)
-    a1 = smooth(a1, window_len=3)
+    # a0 = smooth(a0, window_len=3)
+    # a1 = smooth(a1, window_len=3)
     id_up = np.where((a0 < (avg_smoothed - spacing))
                      & (a1 > avg_smoothed + spacing))[0]
     logger.debug("id_up befor filtering = %s ", len(id_up))
 
-    id_up = filter_marker_y_padding(id_up, conf.marker_y_padding, len(a) - 1)
+    id_up = filter_marker_y_padding(id_up, conf.marker_y_padding_top,
+                                    conf.marker_y_padding_down)
     logger.debug("id_up after filtering = %s ", len(id_up))
 
     logger.debug("id_up = %s", len(id_up))
@@ -248,21 +314,51 @@ def get_markers(a, avg_smoothed, padding, spacing=3):
                        & (a1 < (avg_smoothed - spacing)))[0]
     logger.debug("id_down befor filtering = %s ", len(id_down))
 
-    id_down = filter_marker_y_padding(id_down, conf.marker_y_padding, len(a) - 1)
+    id_down = filter_marker_y_padding(id_down, conf.marker_y_padding_top,
+                                      conf.marker_y_padding_down)
     logger.debug("id_down after filtering = %s ", len(id_down))
 
     logger.debug("id_do = %s ", len(id_down))
     if len(id_up) != len(id_down):
         logger.debug("in_up = %s", id_up)
         logger.debug("in_down = %s", id_down)
-        return np.array([])
+        logger.debug(' m = %s', [(i, j, j - i) for i, j in zip(id_down, id_up)])
+        # return np.array([])
+    r = zip(id_down, id_up)
+    return [i for i in r]
+    # return np.array(r)
+    # return np.stack((id_down, id_up), axis=1)
 
-    return np.stack((id_up, id_down), axis=1)
+
+def generate_markers(id_down, id_up, h_range, h_space):
+    result = {}
+    pass
+
+
+def is_valid_marker(id, marker, markers):
+    if marker.y0 < conf.marker_y_padding_top \
+            or marker.y1 > conf.marker_y_padding_down:
+        return False
+    if not marker.height() in conf.marker_height_range:
+        return False
+
+
+def avg_marker_height(markers):
+    import math
+    # assert len(markers) == 63
+    h = [j - i for i, j in markers]
+    logger.debug('h = %s', h)
+    return np.average(h)
+
+
+def draw_vertices(img, vertices):
+    for k, v in vertices.items():
+        cv2.circle(img, v, 4, [255, 255, 255], 4)
 
 
 if __name__ == '__main__':
 
-    file_path = '../data/colored/3.jpg'
+    file_path = '../data/colored/4.jpg'
     img = cv2.imread(file_path, 0)
     # plt.imshow(img, 'gray')
     # plt.show()
@@ -274,8 +370,12 @@ if __name__ == '__main__':
     # plt.show()
 
     vertices = get_four_corners(img_otsu)
-    v_shifted = add_shift(vertices, conf.l_shift)
-    sheet = transform(img, v_shifted, conf.rshape, False)
+    # v_shifted = add_shift(vertices, conf.marker_l_shift)
+    # v_shifted =  vertices
+    draw_vertices(img, vertices)
+
+    sheet = transform(img, vertices, conf.rshape, False)
+
     # plt.subplot(121), plt.imshow(sheet, 'gray'), plt.title('Input')
     # plt.subplot(122), plt.imshow(sheet, 'gray'), plt.title('Sheet')
     # plt.show()
@@ -287,6 +387,8 @@ if __name__ == '__main__':
     sheet_marker = marker_filter(sheet_marker)
 
     y_sum = sheet_marker.sum(1)
+    # y_sum = sheet_marker.sum(1) / conf.marker_r_shift
+    logger.debug('max_sum = %s', y_sum[np.argmax(y_sum)])
     # y_avg = np.average(y_sum)
 
     avg_smoothed = smooth(y_sum, window_len=conf.marker_smooth_window, window='flat')
@@ -294,7 +396,19 @@ if __name__ == '__main__':
     logger.debug("y_sum shape = %s ", y_sum.shape)
     logger.debug("avg_s shape = %s ", avg_smoothed.shape)
 
-    markers = get_markers(y_sum, avg_smoothed, conf.marker_y_padding, conf.marker_spacing)
+    markers = get_markers(y_sum, avg_smoothed, conf.marker_y_padding_top, conf.marker_threshold_spacing)
+    logger.debug('markers: %s', markers)
+    avg_m = avg_marker_height(markers)
+    logger.debug('avg marker height = %s, %s', avg_m, math.ceil(avg_m))
+
+    first_marker = markers[0]
+    logger.debug('first_markers: %s', first_marker)
+    section_marker_top = conf.top_marker.translate(0, markers[0][0])
+    marker_top = section_marker_top.crop(sheet)
+
+    plt.subplot(211), plt.imshow(marker_top, 'gray'), plt.title("top_marker")
+    plt.subplot(212), plt.plot(y_sum, 'r', avg_smoothed, 'b')  # very important to debug splitting points
+    plt.show()
 
     # for i in avg_smoothed:
     #     print(i)
@@ -308,7 +422,7 @@ if __name__ == '__main__':
 
     for y0, y1 in markers:
         cv2.line(sheet, (0, y0), (width, y0), (0, 255, 255), 1)
-        cv2.line(sheet, (0, y1), (width, y1), (0, 0, 255), 1)
+        cv2.line(sheet, (0, y1), (width, y1), (255, 255, 255), 1)
 
     plt.subplot(231), plt.imshow(img, 'gray'), plt.title('Input')
     plt.subplot(232), plt.imshow(sheet, 'gray'), plt.title('Sheet')

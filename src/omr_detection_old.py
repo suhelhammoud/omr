@@ -257,6 +257,6 @@ def findCorners(img):
 
 
 if __name__ == '__main__':
-    file_path = '../data/colored/3.jpg'
+    file_path = '../data/colored/4.jpg'
     img = cv2.imread(file_path, 0)
     border(img)
