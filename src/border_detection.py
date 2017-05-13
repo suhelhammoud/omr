@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 from numpy.linalg import norm
-from Configuration import OmrConfiguration as conf
+from Configuration import OmrConfiguration as conf, Marker
 import math
 
 logging.basicConfig(level=logging.DEBUG)
@@ -101,6 +101,7 @@ def process_side(x, y, center_x, side="left"):
 
     return result
 
+
 def process_side_distance(x, y, center_x, side="left"):
     result = {}
     # middle_point = get_middle_point(x, y)
@@ -170,7 +171,7 @@ def distance(a, b, p):
     return norm(np.cross(b - a, a - p)) / norm(b - a)
 
 
-def get_corner(x, y, a = None, b = None):
+def get_corner(x, y, a=None, b=None):
     if a is None:
         a = np.array([x[0], y[0]])
     if b is None:
@@ -221,10 +222,10 @@ def get_four_corners(img_filtered):
     # print('bottom  : {bottom_side}'.format(**locals()))
 
 
-def marker_filter(img):
+def marker_filter(img, blur_param=(14, 1), median_param=conf.marker_filter_median_blur):
     blurred = img
-    blurred = cv2.blur(img, (14, 1))
-    blur = cv2.medianBlur(blurred, conf.marker_filter_blur, 0)
+    blurred = cv2.blur(img, blur_param)
+    blur = cv2.medianBlur(blurred, median_param, 0)
     ret, th = cv2.threshold(blur, 127, 255, cv2.THRESH_BINARY)
     return th
 
@@ -292,16 +293,19 @@ def filter_marker_y_padding(mrkr, padding_top, padding_bottom):
     return mrkr[(mrkr > padding_top) & (mrkr < padding_bottom)]
 
 
-def get_markers(a, avg_smoothed, padding, spacing=3):
+def get_down_ups(a, avg_smoothed, spacing=3):
     a0 = a[:-1]
-    # a0[0: padding] = avg_smoothed[0: padding]
     a1 = a[1:]
-    # a1[-padding:-1] = avg_smoothed[-padding:-1]
-
-    # a0 = smooth(a0, window_len=3)
-    # a1 = smooth(a1, window_len=3)
     id_up = np.where((a0 < (avg_smoothed - spacing))
                      & (a1 > avg_smoothed + spacing))[0]
+
+    id_down = np.where((a0 > (avg_smoothed + spacing))
+                       & (a1 < (avg_smoothed - spacing)))[0]
+    return id_down, id_up
+
+
+def get_markers(a, avg_smoothed, spacing=3):
+    id_down, id_up = get_down_ups(a, avg_smoothed, spacing)
     logger.debug("id_up befor filtering = %s ", len(id_up))
 
     id_up = filter_marker_y_padding(id_up, conf.marker_y_padding_top,
@@ -310,37 +314,29 @@ def get_markers(a, avg_smoothed, padding, spacing=3):
 
     logger.debug("id_up = %s", len(id_up))
 
-    id_down = np.where((a0 > (avg_smoothed + spacing))
-                       & (a1 < (avg_smoothed - spacing)))[0]
     logger.debug("id_down befor filtering = %s ", len(id_down))
 
     id_down = filter_marker_y_padding(id_down, conf.marker_y_padding_top,
                                       conf.marker_y_padding_down)
     logger.debug("id_down after filtering = %s ", len(id_down))
-
     logger.debug("id_do = %s ", len(id_down))
-    if len(id_up) != len(id_down):
+
+    m = []
+    for i, j in zip(id_down, id_up):
+        if Marker.can_acept(i, j):
+            m.append(Marker(i, j))
+    markers = np.array(m)
+
+    if len(markers) != 63:
         logger.debug("in_up = %s", id_up)
         logger.debug("in_down = %s", id_down)
         logger.debug(' m = %s', [(i, j, j - i) for i, j in zip(id_down, id_up)])
-        # return np.array([])
-    r = zip(id_down, id_up)
-    return [i for i in r]
+
+    return markers
+    # r = zip(id_down, id_up)
+    # return [i for i in r]
     # return np.array(r)
     # return np.stack((id_down, id_up), axis=1)
-
-
-def generate_markers(id_down, id_up, h_range, h_space):
-    result = {}
-    pass
-
-
-def is_valid_marker(id, marker, markers):
-    if marker.y0 < conf.marker_y_padding_top \
-            or marker.y1 > conf.marker_y_padding_down:
-        return False
-    if not marker.height() in conf.marker_height_range:
-        return False
 
 
 def avg_marker_height(markers):
@@ -356,9 +352,43 @@ def draw_vertices(img, vertices):
         cv2.circle(img, v, 4, [255, 255, 255], 4)
 
 
+def update_markers_with_x(markers):
+    section_markers = [conf.sec_marker.translate(0, m.y0) for m in markers[:]]
+    # marker_top = section_marker_top.crop(sheet)
+    for sec_marker, marker in zip(section_markers, markers):
+        marker_roi = sec_marker.crop(sheet)
+        x0, x1 = get_marker_x0_x1(marker_roi)
+        marker.set_x0_x1(x0, x1)
+
+
+def get_marker_x0_x1(marker_roi):
+    marker_roi = marker_filter(marker_roi, blur_param=(1, 7), median_param=1)
+
+    sum_marker = marker_roi.sum(0)
+    sum_marker_avg = np.average(sum_marker)
+    id_down, id_up = get_down_ups(sum_marker, sum_marker_avg)
+
+    if len(id_down) == 0 and len(id_up) < 2:
+        logger.debug('marker id_down = %s, %s', len(id_down), id_down)
+        logger.debug('marker id_up = %s, %s', len(id_up), id_up)
+        raise Exception(" up, down, error")
+
+    return id_down[0], id_up[1]
+
+
+def draw_markers(sheet, markers):
+    for m in markers:
+        y0, y1 = m.y0_y1()
+        x0, x1 = m.x0_x1()
+        cv2.line(sheet, (0, y0), (width, y0), (0, 255, 255), 1)
+        cv2.line(sheet, (0, y1), (width, y1), (255, 255, 255), 1)
+        cv2.line(sheet, (x0, y0), (x0, y1), (255, 255, 255), 1)
+        cv2.line(sheet, (x1, y0), (x1, y1), (255, 255, 255), 1)
+
+
 if __name__ == '__main__':
 
-    file_path = '../data/colored/4.jpg'
+    file_path = '../data/colored/3.jpg'
     img = cv2.imread(file_path, 0)
     # plt.imshow(img, 'gray')
     # plt.show()
@@ -372,9 +402,10 @@ if __name__ == '__main__':
     vertices = get_four_corners(img_otsu)
     # v_shifted = add_shift(vertices, conf.marker_l_shift)
     # v_shifted =  vertices
-    draw_vertices(img, vertices)
+    # draw_vertices(img, vertices)
 
     sheet = transform(img, vertices, conf.rshape, False)
+    vis = sheet.copy()
 
     # plt.subplot(121), plt.imshow(sheet, 'gray'), plt.title('Input')
     # plt.subplot(122), plt.imshow(sheet, 'gray'), plt.title('Sheet')
@@ -383,7 +414,7 @@ if __name__ == '__main__':
     sheet_name = conf.sec_name.crop(sheet)
     sheet_type = conf.sec_type.crop(sheet)
     sheet_one = conf.sec_one.crop(sheet)
-    sheet_marker = conf.sec_marker.crop(sheet)
+    sheet_marker = conf.sec_marker_column.crop(sheet)
     sheet_marker = marker_filter(sheet_marker)
 
     y_sum = sheet_marker.sum(1)
@@ -396,19 +427,31 @@ if __name__ == '__main__':
     logger.debug("y_sum shape = %s ", y_sum.shape)
     logger.debug("avg_s shape = %s ", avg_smoothed.shape)
 
-    markers = get_markers(y_sum, avg_smoothed, conf.marker_y_padding_top, conf.marker_threshold_spacing)
-    logger.debug('markers: %s', markers)
-    avg_m = avg_marker_height(markers)
-    logger.debug('avg marker height = %s, %s', avg_m, math.ceil(avg_m))
+    markers = get_markers(y_sum, avg_smoothed, conf.marker_threshold_spacing)
+    if len(markers) != 63:
+        plt.subplot(313), plt.plot(y_sum, 'r', avg_smoothed, 'b'), plt.title(
+            "error ")  # very important to debug splitting points
+        plt.show()
+    # logger.debug('markers: %s', markers)
+    # avg_m = avg_marker_height(markers)
+    # logger.debug('avg marker height = %s, %s', avg_m, math.ceil(avg_m))
 
-    first_marker = markers[0]
-    logger.debug('first_markers: %s', first_marker)
-    section_marker_top = conf.top_marker.translate(0, markers[0][0])
-    marker_top = section_marker_top.crop(sheet)
+    # section_marker_top = conf.top_marker.translate(0, markers[0].y0)
 
-    plt.subplot(211), plt.imshow(marker_top, 'gray'), plt.title("top_marker")
-    plt.subplot(212), plt.plot(y_sum, 'r', avg_smoothed, 'b')  # very important to debug splitting points
-    plt.show()
+    update_markers_with_x(markers)
+    draw_markers(vis, markers)
+
+    # section_markers = [conf.sec_marker.translate(0, m.y0) for m in markers[:]]
+    # # marker_top = section_marker_top.crop(sheet)
+    # for sec_marker, marker in zip(section_markers, markers):
+    #     marker_roi = sec_marker.crop(sheet)
+    #     x0, x1 = get_marker_x0_x1(marker_roi)
+    #     marker.set_x0_x1(x0, x1)
+
+    # plt.subplot(311), plt.imshow(marker_roi, 'gray'), plt.title("marker_roi")
+    # plt.subplot(312), plt.plot(sum_marker, 'r'), plt.title("marker_sum")
+    # plt.subplot(313), plt.plot(y_sum, 'r', avg_smoothed, 'b')  # very important to debug splitting points
+    # plt.show()
 
     # for i in avg_smoothed:
     #     print(i)
@@ -419,13 +462,17 @@ if __name__ == '__main__':
     # for yy, x_img in slide_marker(sheet_marker, conf.y_step, conf.y_window):
     #     plt.imshow(x_img, 'gray'), plt.title(str(yy))
     #     plt.show()
-
-    for y0, y1 in markers:
-        cv2.line(sheet, (0, y0), (width, y0), (0, 255, 255), 1)
-        cv2.line(sheet, (0, y1), (width, y1), (255, 255, 255), 1)
+    #
+    # for m in markers:
+    #     y0, y1 = m.y0_y1()
+    #     x0, x1 = m.x0_x1()
+    #     cv2.line(sheet, (0, y0), (width, y0), (0, 255, 255), 1)
+    #     cv2.line(sheet, (0, y1), (width, y1), (255, 255, 255), 1)
+    #     cv2.line(sheet, (x0, y0), (x0, y1), (255, 255, 255), 1)
+    #     cv2.line(sheet, (x1, y0), (x1, y1), (255, 255, 255), 1)
 
     plt.subplot(231), plt.imshow(img, 'gray'), plt.title('Input')
-    plt.subplot(232), plt.imshow(sheet, 'gray'), plt.title('Sheet')
+    plt.subplot(232), plt.imshow(vis, 'gray'), plt.title('Sheet')
     plt.subplot(233), plt.imshow(sheet_marker, 'gray'), plt.title('sheet_marker')
     plt.subplot(234), plt.imshow(sheet_name, 'gray'), plt.title('Name')
     plt.subplot(235), plt.imshow(sheet_type, 'gray'), plt.title('type')

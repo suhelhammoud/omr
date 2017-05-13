@@ -15,6 +15,7 @@ class Section:
         return img[self.y0: self.y1, self.x0: self.x1]
 
     def translate(self, dx, dy):
+        '''returns new section transformed into new coordinates'''
         return Section(self.x0 + dx, self.y0 + dy,
                        self.x1 + dx, self.y1 + dy)
 
@@ -29,34 +30,35 @@ class OmrConfiguration:
     y_step = 20
     y_window = 100
     marker_x0_bound = 0
-    marker_x1_bound = 50
+    marker_x1_bound = 55
     # sec_marker = Section(0, 0, marker_r_shift - marker_l_shift, rshape[1])
-    sec_marker = Section(marker_x0_bound, 0, marker_x1_bound, rshape[1])
+    sec_marker_column = Section(marker_x0_bound, 0, marker_x1_bound, rshape[1])
 
     num_markers = 63
-    marker_filter_blur = 3
-    marker_y_padding_top = 40
-    marker_y_padding_down = rshape[1] - 20
-    marker_smooth_window = 150
-    marker_threshold_spacing = 6
-    marker_mx_height = 12  # TODO use in get+
+    marker_filter_median_blur = 3
+    marker_y_padding_top = 45
+    marker_y_padding_down = rshape[1] - 30
+    marker_smooth_window = 180
+    marker_threshold_spacing = 2
 
-    marker_height_range = range(6, 10)
+    marker_height_range = range(3, 12)
     marker_space_range = range(20, 25)
     marker_width_range = range(7, 27)
 
-
-    top_marker = Section(0, -5, 300, 15)
+    # top_marker = Section(0, -5, 300, 15)
+    sec_marker = Section(0, -3, 70, 12)
 
 
 conf = OmrConfiguration
 
-
 class Marker:
-    def __init__(self, y0, y1):
+    def __init__(self, y0, y1, x0 = None, x1= None):
         assert y1 > y0
         self.y0 = y0
         self.y1 = y1
+        self.x0 = x0
+        self.x1 = x1
+
 
     def height(self):
         return self.y1 - self.y0
@@ -73,6 +75,19 @@ class Marker:
         return (lower.y0 - upper.y0) in space \
                and (lower.y1 - upper.y1) in space
 
+    def __repr__(self):
+        return 'Marker (y0:{}, y1:{}, x0:{}, x1:{})'.format(self.y0, self.y1, self.x0, self.x1)
+
+    def y0_y1(self):
+        return self.y0, self.y1
+
+    def set_x0_x1(self, x0, x1):
+        self.x0 = x0
+        self.x1 = x1
+
+    def x0_x1(self):
+        return self.x0, self.x1
+
     @staticmethod
     def upper_lower(m1, m2):
         if m2.is_lower_than(m1):
@@ -85,3 +100,10 @@ class Marker:
         return y0 > conf.marker_y_padding_top \
                and y1 < conf.marker_y_padding_down \
                and y1 - y0 in conf.marker_height_range
+
+    def is_valid_marker(marker):
+        if marker.y0 < conf.marker_y_padding_top \
+                or marker.y1 > conf.marker_y_padding_down:
+            return False
+        if not marker.height() in conf.marker_height_range:
+            return False
