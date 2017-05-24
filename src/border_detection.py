@@ -393,8 +393,11 @@ def get_marker_x0_x1(marker_roi):
 def draw_markers(sheet, markers):
     height, width = sheet.shape
     for m in markers.values():
-        y0, y1, shift = m.y0_y1_shift()
+        y0, y1, shift_per_x = m.y0_y1_shift()
         x0, x1 = m.x0_x1()
+        shift = int(shift_per_x * width)
+        if (m.id == 49):
+            print("shift for marker 49", shift)
         cv2.line(sheet, (0, y0), (width, y0 + shift), (0, 255, 255), 1)
         cv2.line(sheet, (0, y1), (width, y1 + shift), (255, 255, 255), 1)
         cv2.line(sheet, (x0, y0), (x0, y1 + shift), (255, 255, 255), 1)
@@ -404,7 +407,8 @@ def draw_markers(sheet, markers):
 def calibre_vertical(center_x=None, roi=None):
     height, width = roi.shape
     logger.debug('marker_calibre shape = %s', roi.shape)
-    blur = cv2.medianBlur(roi, 3, 0)
+    # blur = cv2.medianBlur(roi, 3, 0)
+    blur = roi
     ret3, bin_roi = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     y_sum = bin_roi.sum(1) / width
 
@@ -441,10 +445,21 @@ def calibrate_with_marker(marker, sheet,
     # ret3, roi_calibre = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     marker_new = marker.translate(-sec.x1, -sec.y1)
-    diff = calibre_vertical(marker_new.center_y(), roi_calibre)
-    marker_new.set_shift_y(diff)
+    diff = calibre_vertical(marker_new.y1, roi_calibre)
+    m_c_center = (marker_calibre[0] + marker_calibre[1]) / 2.0
+    shift_per_x = diff / m_c_center
+    marker_new.set_shift_y(shift_per_x)
+
     logger.debug('marker diff = %s', diff)
     assert diff < 30
+
+    x_abc_relative = [28.1, 44.5, 60.5, 75.5, 91.5]
+    x = [int(i * border / 100) for i in x_abc_relative]
+    y = [int(marker_new.y1 + shift_per_x * i) for i in x]
+    logger.debug("x = %s, y = %s", x, y)
+
+    for point in zip(x, y):
+        cv2.circle(img, point, 3, [255, 255, 255], 3)
 
     draw_markers(img, {marker_new.id: marker_new})
     plt.subplot(311), plt.imshow(img, 'gray'), plt.title('marker: ' + str(marker.id))
@@ -452,6 +467,7 @@ def calibrate_with_marker(marker, sheet,
     plt.subplot(313), plt.imshow(roi_calibre, 'gray'), plt.title('calibre')
 
     plt.show()
+    return shift_per_x
 
 
 if __name__ == '__main__':
@@ -507,11 +523,20 @@ if __name__ == '__main__':
     # section_marker_top = conf.top_marker.translate(0, markers[0].y0)
 
     markers = update_markers_with_x(markers_list)
+
+    last_shift = 0
+
+    for m in markers.values():
+        if m.id in [15, 29, 33, 37, 41, 47, 49]:
+            last_shift = calibrate_with_marker(m, sheet)
+        m.set_shift_y(last_shift)
+
+    # for i in [15, 29, 33, 37, 41, 47, 49]:
+    #     diff = calibrate_with_marker(markers[i], sheet)
+    #     markers[i].set_shift_y(diff)
+    #     logger.debug('marker %s shift = %s', i, markers[i].shift_y)
+
     draw_markers(vis, markers)
-
-    for i in [15, 29, 33, 37, 41, 47, 49]:
-        calibrate_with_marker(markers[i], sheet)
-
     # section_markers = [conf.sec_marker.translate(0, m.y0) for m in markers[:]]
     # # marker_top = section_marker_top.crop(sheet)
     # for sec_marker, marker in zip(section_markers, markers):

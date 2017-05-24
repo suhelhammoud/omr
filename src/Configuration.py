@@ -68,6 +68,8 @@ class OmrConfiguration:
     marker_calibre_range = (195, 205)
 
 
+
+
 conf = OmrConfiguration
 
 
@@ -89,7 +91,7 @@ class Marker:
         return self.id
 
     def set_shift_y(self, dy):
-        self.shift_y = int(dy)
+        self.shift_y = dy
 
     def translate(self, dx, dy):
         '''returns new section transformed into new coordinates'''
