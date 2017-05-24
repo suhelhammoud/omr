@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 from numpy.linalg import norm
-from Configuration import OmrConfiguration as conf, Marker
+from Configuration import OmrConfiguration as conf, Marker, Section
 import math
 
 logging.basicConfig(level=logging.DEBUG)
@@ -293,6 +293,14 @@ def filter_marker_y_padding(mrkr, padding_top, padding_bottom):
     return mrkr[(mrkr > padding_top) & (mrkr < padding_bottom)]
 
 
+def get_ups(a, avg_smoothed, spacing=0):
+    a0 = a[:-1]
+    a1 = a[1:]
+    id_up = np.where((a0 < (avg_smoothed - spacing))
+                     & (a1 > avg_smoothed + spacing))[0]
+    return id_up
+
+
 def get_down_ups(a, avg_smoothed, spacing=3):
     a0 = a[:-1]
     a1 = a[1:]
@@ -352,13 +360,19 @@ def draw_vertices(img, vertices):
         cv2.circle(img, v, 4, [255, 255, 255], 4)
 
 
-def update_markers_with_x(markers):
-    section_markers = [conf.sec_marker.translate(0, m.y0) for m in markers[:]]
+def update_markers_with_x(markers_list):
+    section_markers = [conf.sec_marker.translate(0, m.y0) for m in markers_list[:]]
     # marker_top = section_marker_top.crop(sheet)
-    for sec_marker, marker in zip(section_markers, markers):
+    for sec_marker, marker in zip(section_markers, markers_list):
         marker_roi = sec_marker.crop(sheet)
         x0, x1 = get_marker_x0_x1(marker_roi)
         marker.set_x0_x1(x0, x1)
+    result = {}
+    if len(markers_list == 63):
+        for i in range(len(markers_list)):
+            index = i + 1
+            result[index] = markers_list[i].set_id(index)
+    return result
 
 
 def get_marker_x0_x1(marker_roi):
@@ -377,18 +391,72 @@ def get_marker_x0_x1(marker_roi):
 
 
 def draw_markers(sheet, markers):
-    for m in markers:
-        y0, y1 = m.y0_y1()
+    height, width = sheet.shape
+    for m in markers.values():
+        y0, y1, shift = m.y0_y1_shift()
         x0, x1 = m.x0_x1()
-        cv2.line(sheet, (0, y0), (width, y0), (0, 255, 255), 1)
-        cv2.line(sheet, (0, y1), (width, y1), (255, 255, 255), 1)
-        cv2.line(sheet, (x0, y0), (x0, y1), (255, 255, 255), 1)
-        cv2.line(sheet, (x1, y0), (x1, y1), (255, 255, 255), 1)
+        cv2.line(sheet, (0, y0), (width, y0 + shift), (0, 255, 255), 1)
+        cv2.line(sheet, (0, y1), (width, y1 + shift), (255, 255, 255), 1)
+        cv2.line(sheet, (x0, y0), (x0, y1 + shift), (255, 255, 255), 1)
+        cv2.line(sheet, (x1, y0), (x1, y1 + shift), (255, 255, 255), 1)
+
+
+def calibre_vertical(center_x=None, roi=None):
+    height, width = roi.shape
+    logger.debug('marker_calibre shape = %s', roi.shape)
+    blur = cv2.medianBlur(roi, 3, 0)
+    ret3, bin_roi = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    y_sum = bin_roi.sum(1) / width
+
+    down, ups = get_down_ups(y_sum, 160, spacing=0)
+    logger.debug("marker_calibre down = %s, ups = %s", down, ups)
+    assert len(ups) == 1 and len(down) == 1
+
+    new_center = (down[0] + ups[0]) / 2
+    return new_center - center_x
+    # plt.subplot(311), plt.imshow(bin_roi, 'gray'), plt.title('roi')
+    # plt.subplot(312), plt.plot(y_sum, 'r'), plt.title('y_sum')
+    # plt.subplot(313), plt.imshow(roi_calibre, 'gray'), plt.title('calibre')
+
+    # plt.show()
+
+
+def calibrate_with_marker(marker, sheet,
+                          marker_shift=conf.sec_marker_shift,
+                          marker_calibre=conf.marker_calibre_range):
+    sec = Section.of(marker, marker_shift)
+    img = sec.crop(sheet)
+    # img = cv2.blur(img, (3,10))
+    # ret, img = cv2.threshold(img, 160, 255, cv2.THRESH_BINARY)
+
+    x_sum = img.sum(0) / sec.height()
+
+    id_up = get_ups(x_sum, 168)
+    border = id_up[-1]
+
+    print(marker.id, id_up)
+
+    roi_calibre = img[:, marker_calibre[0]: marker_calibre[1]]
+    # blur = cv2.medianBlur(roi_calibre, 3, 0)
+    # ret3, roi_calibre = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    marker_new = marker.translate(-sec.x1, -sec.y1)
+    diff = calibre_vertical(marker_new.center_y(), roi_calibre)
+    marker_new.set_shift_y(diff)
+    logger.debug('marker diff = %s', diff)
+    assert diff < 30
+
+    draw_markers(img, {marker_new.id: marker_new})
+    plt.subplot(311), plt.imshow(img, 'gray'), plt.title('marker: ' + str(marker.id))
+    plt.subplot(312), plt.plot(x_sum, 'r'), plt.title('x_sum')
+    plt.subplot(313), plt.imshow(roi_calibre, 'gray'), plt.title('calibre')
+
+    plt.show()
 
 
 if __name__ == '__main__':
 
-    file_path = '../data/colored/3.jpg'
+    file_path = '../data/colored/6.jpg'
     img = cv2.imread(file_path, 0)
     # plt.imshow(img, 'gray')
     # plt.show()
@@ -427,8 +495,8 @@ if __name__ == '__main__':
     logger.debug("y_sum shape = %s ", y_sum.shape)
     logger.debug("avg_s shape = %s ", avg_smoothed.shape)
 
-    markers = get_markers(y_sum, avg_smoothed, conf.marker_threshold_spacing)
-    if len(markers) != 63:
+    markers_list = get_markers(y_sum, avg_smoothed, conf.marker_threshold_spacing)
+    if len(markers_list) != 63:
         plt.subplot(313), plt.plot(y_sum, 'r', avg_smoothed, 'b'), plt.title(
             "error ")  # very important to debug splitting points
         plt.show()
@@ -438,8 +506,11 @@ if __name__ == '__main__':
 
     # section_marker_top = conf.top_marker.translate(0, markers[0].y0)
 
-    update_markers_with_x(markers)
+    markers = update_markers_with_x(markers_list)
     draw_markers(vis, markers)
+
+    for i in [15, 29, 33, 37, 41, 47, 49]:
+        calibrate_with_marker(markers[i], sheet)
 
     # section_markers = [conf.sec_marker.translate(0, m.y0) for m in markers[:]]
     # # marker_top = section_marker_top.crop(sheet)
