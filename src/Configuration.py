@@ -55,7 +55,7 @@ class OmrConfiguration:
     marker_filter_median_blur = 3
     marker_y_padding_top = 45
     marker_y_padding_down = rshape[1] - 30
-    marker_smooth_window = 170
+    marker_smooth_window = 110
     marker_threshold_spacing = 2
 
     marker_height_range = range(3, 12)

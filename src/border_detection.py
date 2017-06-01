@@ -382,12 +382,18 @@ def get_marker_x0_x1(marker_roi):
     sum_marker_avg = np.average(sum_marker)
     id_down, id_up = get_down_ups(sum_marker, sum_marker_avg)
 
-    if len(id_down) == 0 and len(id_up) < 2:
+    if len(id_down) == 0 and len(id_up) < 2 :
         logger.debug('marker id_down = %s, %s', len(id_down), id_down)
         logger.debug('marker id_up = %s, %s', len(id_up), id_up)
+        plt.imshow(marker_roi, 'gray')
+        plt.show()
         raise Exception(" up, down, error")
 
-    return id_down[0], id_up[1]
+    if len(id_up) == 1:
+        return id_down[0], id_up[0]
+    else:
+
+        return id_down[0], id_up[1]
 
 
 def draw_markers(sheet, markers):
@@ -430,13 +436,19 @@ def calibrate_with_marker(marker, sheet,
                           marker_calibre=conf.marker_calibre_range):
     sec = Section.of(marker, marker_shift)
     img = sec.crop(sheet)
-    # img = cv2.blur(img, (3,10))
-    # ret, img = cv2.threshold(img, 160, 255, cv2.THRESH_BINARY)
+    # img = cv2.blur(img, (1,1))
+    # ret, img = cv2.threshold(img, 150, 255, cv2.THRESH_BINARY)
 
     x_sum = img.sum(0) / sec.height()
 
-    id_up = get_ups(x_sum, 168)
+    id_up = get_ups(x_sum, 150) # TODO adjust the average params
+
+    if len(id_up) == 0:
+        logger.debug('get_ups: %s', id_up)
+        plt.imshow(img, 'gray')
+        plt.show()
     border = id_up[-1]
+
 
     print(marker.id, id_up)
 
@@ -472,7 +484,8 @@ def calibrate_with_marker(marker, sheet,
 
 if __name__ == '__main__':
 
-    file_path = '../data/colored/6.jpg'
+    # file_path = '../data/colored/6.jpg'
+    file_path = '../data/in2/01.jpg'
     img = cv2.imread(file_path, 0)
     # plt.imshow(img, 'gray')
     # plt.show()
