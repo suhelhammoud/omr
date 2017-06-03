@@ -8,7 +8,7 @@ from numpy.linalg import norm
 from Configuration import OmrConfiguration as conf, Marker, Section
 from omr_utils import *
 from OmrExceptions import *
-
+from process_id import process_id
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,26 @@ class V:
     BOTTOM_RIGHT = "BOTTOM_RIGHT"
 
 
+"""
+    + <-- vertex  top_left (optional)
+     \   
+      \   
+       \
+        + <-- vertex top_right
+        |  
+        |   
+        |  }-- right side
+        |
+        |
+        + <-- vertex bottom_right
+       /
+      /
+     /
+    + <-- vertex bottom_left (optional)
+
+"""
+
+
 def get_page_vertical_sides(img):
     """
     Get the index of first and last none-zero values for each row in image 'img'
@@ -28,6 +48,7 @@ def get_page_vertical_sides(img):
     :return ynz: y indexes where x have none-zero value
             l_side, r_side: x indexes for both sides
             forn abnoraml borders return None
+    :raise NoBorderDetectedError
     """
     height, width = img.shape
     left_side = np.argmax(img, axis=1)
@@ -35,12 +56,13 @@ def get_page_vertical_sides(img):
     assert len(left_side) == len(right_side) == height
 
     ynz = np.nonzero(left_side)[0]
-    l_side = left_side[ynz]
-    r_side = right_side[ynz]
-    if np.all(ynz) and np.all(l_side) and np.all(r_side):
-        return ynz, l_side, r_side
+    xx_left = left_side[ynz]
+    xx_right = right_side[ynz]
+
+    if not np.all(ynz) or not np.all(xx_left) or not np.all(xx_right):
+        raise BorderError
     else:
-        return None
+        return xx_left, xx_right, ynz
 
 
 def get_middle_point(xx, yy):
@@ -171,34 +193,28 @@ def get_max_distant_point(x, y, a=None, b=None):
 
 
 def get_four_vertices(img_filtered):
-    # img_filtered = thresh_otsu(img)
-    # plt.subplot(121), plt.imshow(img, 'gray'), plt.title('Input')
-    # plt.subplot(122), plt.imshow(img_filtered, 'gray'), plt.title('Sheet')
+    xx_left, xx_right, yy = get_page_vertical_sides(img_filtered)
 
-    y, x_left, x_right = get_page_vertical_sides(img_filtered)
-    # logger.debug("y len = %s, data= %s ", len(y), y)
-    # logger.debug("x_left len = %s, data= %s ", len(x_left), x_left)
-    # logger.debug("x_right len = %s, data= %s ", len(x_right), x_right)
-
-    center_x, center_y = get_center(x_left, x_right, y)
+    center_x, center_y = get_center(xx_left, xx_right, yy)
     logger.debug('center_x: %s, center_y: %s', center_x, center_y)
 
-    logger.debug("processing left side")
-    # l_result = process_side(x_left, y, center_x, side="left")
-    l_result = get_vertices_from_side(x_left, y, center_x, is_left_side=True)
+    l_result = get_vertices_from_side(xx_left, yy, center_x, is_left_side=True)
     logger.debug('left_side_vertices = %s', l_result)
+    if not V.TOP_LEFT in l_result or not V.BOTTOM_LEFT in l_result:
+        raise VertexError("Left side vertices:", l_result)
 
-    logger.debug("processing right side")
-    # r_result = process_side(x_right, y, center_x, side="right")
-    r_result = get_vertices_from_side(x_right, y, center_x, is_left_side=False)
+    r_result = get_vertices_from_side(xx_right, yy, center_x, is_left_side=False)
     logger.debug('right_side_vertices = %s', r_result)
+    if not V.TOP_RIGHT in r_result or not V.BOTTOM_RIGHT in r_result:
+        raise VertexError('Right side vertices:', r_result)
 
     four_points = merge_vertices(l_result, r_result)
+    assert len(four_points) == 4
     logger.debug("four points = %s", four_points)
     return four_points
 
 
-def marker_filter(img, blur_param=(14, 1), median_param=conf.marker_filter_median_blur):
+def marker_filter(img, blur_param=(14, 1), median_param=3):
     blurred = img
     blurred = cv2.blur(img, blur_param)
     blur = cv2.medianBlur(blurred, median_param, 0)
@@ -364,6 +380,7 @@ def get_markers(a, avg_smoothed, spacing=3):
     # return np.array(r)
     # return np.stack((id_down, id_up), axis=1)
 
+
 def draw_vertices(img, vertices):
     for k, v in vertices.items():
         cv2.circle(img, v, 4, [255, 255, 255], 4)
@@ -405,14 +422,12 @@ def get_marker_x0_x1(marker_roi):
         return id_down[0], id_up[1]
 
 
-def draw_markers(sheet, markers):
+def draw_markers_lines(sheet, markers):
     height, width = sheet.shape
     for m in markers.values():
         y0, y1, shift_per_x = m.y0_y1_shift()
         x0, x1 = m.x0_x1()
         shift = int(shift_per_x * width)
-        if (m.id == 49):
-            print("shift for marker 49", shift)
         cv2.line(sheet, (0, y0), (width, y0 + shift), (0, 255, 255), 1)
         cv2.line(sheet, (0, y1), (width, y1 + shift), (255, 255, 255), 1)
         cv2.line(sheet, (x0, y0), (x0, y1 + shift), (255, 255, 255), 1)
@@ -481,12 +496,12 @@ def calibrate_with_marker(marker, sheet,
     for point in zip(x, y):
         cv2.circle(img, point, 3, [255, 255, 255], 3)
 
-    draw_markers(img, {marker_new.id: marker_new})
-    plt.subplot(311), plt.imshow(img, 'gray'), plt.title('marker: ' + str(marker.id))
-    plt.subplot(312), plt.plot(x_sum, 'r'), plt.title('x_sum')
-    plt.subplot(313), plt.imshow(roi_calibre, 'gray'), plt.title('calibre')
-
-    plt.show()
+    draw_markers_lines(img, {marker_new.id: marker_new})
+    # plt.subplot(311), plt.imshow(img, 'gray'), plt.title('marker: ' + str(marker.id))
+    # plt.subplot(312), plt.plot(x_sum, 'r'), plt.title('x_sum')
+    # plt.subplot(313), plt.imshow(roi_calibre, 'gray'), plt.title('calibre')
+    #
+    # plt.show()
     return shift_per_x
 
 
@@ -510,17 +525,25 @@ if __name__ == '__main__':
     # draw_vertices(img, vertices)
 
     sheet = transform(img, vertices, conf.rshape, False)
-    vis = sheet.copy()
+    vis_sheet = sheet.copy()
 
-    # plt.subplot(121), plt.imshow(sheet, 'gray'), plt.title('Input')
+    # plt.subplot(111), plt.imshow(sheet, 'gray'), plt.title('sheet')
+    # plt.show()
     # plt.subplot(122), plt.imshow(sheet, 'gray'), plt.title('Sheet')
     # plt.show()
     # cv2.imwrite('../data/out/sheet.jpg', sheet)
-    sheet_name = conf.sec_name.crop(sheet)
+
+    sheet_id = conf.sec_id.crop(sheet)
+
+    process_id(1, sheet_id)
+    exit(0)
+
     sheet_type = conf.sec_type.crop(sheet)
     sheet_one = conf.sec_one.crop(sheet)
     sheet_marker = conf.sec_marker_column.crop(sheet)
-    sheet_marker = marker_filter(sheet_marker)
+    sheet_marker = marker_filter(sheet_marker,
+                                 blur_param=(14, 1),
+                                 median_param=conf.marker_filter_median_blur)
 
     y_sum = sheet_marker.sum(1)
     # y_sum = sheet_marker.sum(1) / conf.marker_r_shift
@@ -557,7 +580,7 @@ if __name__ == '__main__':
     #     markers[i].set_shift_y(diff)
     #     logger.debug('marker %s shift = %s', i, markers[i].shift_y)
 
-    draw_markers(vis, markers)
+    draw_markers_lines(vis_sheet, markers)
     # section_markers = [conf.sec_marker.translate(0, m.y0) for m in markers[:]]
     # # marker_top = section_marker_top.crop(sheet)
     # for sec_marker, marker in zip(section_markers, markers):
@@ -589,9 +612,9 @@ if __name__ == '__main__':
     #     cv2.line(sheet, (x1, y0), (x1, y1), (255, 255, 255), 1)
 
     plt.subplot(231), plt.imshow(img, 'gray'), plt.title('Input')
-    plt.subplot(232), plt.imshow(vis, 'gray'), plt.title('Sheet')
+    plt.subplot(232), plt.imshow(vis_sheet, 'gray'), plt.title('Sheet')
     plt.subplot(233), plt.imshow(sheet_marker, 'gray'), plt.title('sheet_marker')
-    plt.subplot(234), plt.imshow(sheet_name, 'gray'), plt.title('Name')
+    plt.subplot(234), plt.imshow(sheet_id, 'gray'), plt.title('Name')
     plt.subplot(235), plt.imshow(sheet_type, 'gray'), plt.title('type')
     plt.subplot(236), plt.imshow(sheet_one, 'gray'), plt.title('one')
     plt.show()
