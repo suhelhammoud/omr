@@ -1,191 +1,176 @@
 import logging
-from omr_utils import *
+
 import cv2
-import numpy as np
+# import numpy as np
 from matplotlib import pyplot as plt
 from numpy.linalg import norm
+
 from Configuration import OmrConfiguration as conf, Marker, Section
-import math
+from omr_utils import *
+from OmrExceptions import *
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
 class V:
-    top_left = "top_left"
-    top_right = "top_right"
-    bottom_left = "bottom_left"
-    bottom_right = "bottom_right"
+    TOP_LEFT = "TOP_LEFT"
+    TOP_RIGHT = "TOP_RIGHT"
+    BOTTOM_LEFT = "BOTTOM_LEFT"
+    BOTTOM_RIGHT = "BOTTOM_RIGHT"
 
 
 def get_page_vertical_sides(img):
+    """
+    Get the index of first and last none-zero values for each row in image 'img'
+
+    :param img: gray binary image
+    :return ynz: y indexes where x have none-zero value
+            l_side, r_side: x indexes for both sides
+            forn abnoraml borders return None
+    """
     height, width = img.shape
     left_side = np.argmax(img, axis=1)
     right_side = width - np.argmax(img[:, ::-1], axis=1)
     assert len(left_side) == len(right_side) == height
 
     ynz = np.nonzero(left_side)[0]
-
-    # rleft = nz_point_side(left_side)
-    # rright= nz_point_side(right_side)
-    return ynz, left_side[ynz], right_side[ynz]
-
-
-def stack(nz, side):
-    return np.stack((nz, side), axis=1)
+    l_side = left_side[ynz]
+    r_side = right_side[ynz]
+    if np.all(ynz) and np.all(l_side) and np.all(r_side):
+        return ynz, l_side, r_side
+    else:
+        return None
 
 
-def get_middle_point(x, y):
-    half = int(len(x) / 2)
-    return x[half], y[half]
+def get_middle_point(xx, yy):
+    """
+    Roughly get the middle point of line of x, y coordinates
+
+    :param xx: np.array , x array coordinates
+    :param yy: np.array , y array coordinates
+    :return: (x_center, y_center)
+    """
+    half = int(len(xx) / 2)
+    return xx[half], yy[half]
 
 
-def get_center(left_x, right_x, ynz):
-    l_point = get_middle_point(left_x, ynz)
-    r_point = get_middle_point(right_x, ynz)
+def get_center(xx_left, xx_right, yy_nz):
+    """
+    Get roughly center of captured image
+
+    :param xx_left: np.array
+    :param xx_right: np.array
+    :param yy_nz: np.array, none-zero values of yy coordinates
+    :return: (x_center, y_center)
+    """
+    l_point = get_middle_point(xx_left, yy_nz)
+    r_point = get_middle_point(xx_right, yy_nz)
     assert l_point[1] == r_point[1]
     return int((l_point[0] + r_point[0]) / 2), l_point[1]
 
 
-def split_list(a_list):
+def split_list_in_half(a_list):
     half = int(len(a_list) / 2)
     return a_list[:half], a_list[half:]
 
 
-def process_side(x, y, center_x, side="left"):
+def get_vertices_from_side(xx, yy, center_x, is_left_side=True):
+    """
+    Get vertices of the side, depending on the number of line segments exist in the side,
+     the resulted vertices might be 2, 3, or 4 ones
+
+    :param xx: np.array, x coordinates of side
+    :param yy: np.array, y coordinates of side
+    :param center_x: integer, x coordinate of roughly middle point between left and right sides
+    :param is_left_side: boolean
+    :return: dictionary of 2, 3, or 4 points which represent the vertices of the side
+    """
     result = {}
-    # middle_point = get_middle_point(x, y)
 
-    x_top, x_bottom = split_list(x)
-    y_top, y_bottom = split_list(y)
-    # logger.debug("x_top = %s", x_top)
-    # logger.debug("y_top = %s", y_top)
+    xx_top, xx_bottom = split_list_in_half(xx)
+    yy_top, yy_bottom = split_list_in_half(yy)
 
-    # Process the upper side
-    if (x_top[0] - center_x) * (x_top[-1] - center_x) > 0:
-        # same side
-        if side == "left":
-            result[V.top_left] = (x_top[0], y_top[0])
-        else:
-            result[V.top_right] = (x_top[0], y_top[0])
-    else:  # cross sides
-        corner = get_corner(x_top, y_top)
-        logger.debug("corner top = %s , side = %s", corner, side)
-        if side == "left":
-            result[V.top_right] = (x_top[0], y_top[0])
-            result[V.top_left] = corner
-        else:
-            result[V.top_left] = (x_top[0], y_top[0])
-            result[V.top_right] = corner
+    r_top_left, r_top_right = process_sub_side(xx_top, yy_top, center_x,
+                                               isTopSide=True, isLeftSide=is_left_side)
+    if not r_top_left is None:
+        result[V.TOP_LEFT] = r_top_left
+    if not r_top_right is None:
+        result[V.TOP_RIGHT] = r_top_right
 
-    # logger.debug("x_bottom = %s", x_bottom)
-    # logger.debug("y_bottom = %s", y_bottom)
+    v_bottom_left, v_bottom_right = process_sub_side(xx_bottom, yy_bottom, center_x,
+                                                     isTopSide=False, isLeftSide=is_left_side)
+    if not v_bottom_left is None:
+        result[V.BOTTOM_LEFT] = v_bottom_left
 
-    # Process the lower side
-    if (x_bottom[0] - center_x) * (x_bottom[-1] - center_x) > 0:
-        # same side
-        if side == "left":
-            result[V.bottom_left] = (x_bottom[-1], y_bottom[-1])
-        else:
-            result[V.bottom_right] = (x_bottom[-1], y_bottom[-1])
-    else:
-        # cross sides
-        corner = get_corner(x_bottom, y_bottom)
-        logger.debug("corner bottom = %s , side = %s", corner, side)
-        if side == "left":
-            result[V.bottom_right] = (x_bottom[-1], y_bottom[-1])
-            result[V.bottom_left] = corner
-        else:
-            result[V.bottom_left] = (x_bottom[-1], y_bottom[-1])
-            result[V.bottom_right] = corner
+    if not v_bottom_right is None:
+        result[V.BOTTOM_RIGHT] = v_bottom_right
 
     return result
 
 
-def process_side_distance(x, y, center_x, side="left"):
-    result = {}
-    # middle_point = get_middle_point(x, y)
-
-    x_top, x_bottom = split_list(x)
-    y_top, y_bottom = split_list(y)
-    # logger.debug("x_top = %s", x_top)
-    # logger.debug("y_top = %s", y_top)
+def process_sub_side(xx, yy, center_x, isTopSide=True, isLeftSide=True):
+    v1_index = -1 if isTopSide else 0
+    v2_index = -1 - v1_index  # 0 or -1
 
     # Process the upper side
-    if (x_top[0] - center_x) * (x_top[-1] - center_x) > 0:
-        a = np.array([center_x, y_top[0]])
-        b = np.array([x_top[-1], y_top[-1]])
-        corner = get_corner(x_top, y_top, a, b)
-        # logger.debug('xxx upper_corner = %s', corner)
-
+    if (xx[v1_index] - center_x) * (xx[v2_index] - center_x) > 0:
         # same side
-        if side == "left":
-            result[V.top_left] = corner
-        else:
-            result[V.top_right] = corner
+        a = np.array([center_x, yy[v2_index]])
+        b = np.array([xx[v1_index], yy[v1_index]])
+        vertex = get_max_distant_point(xx, yy, a, b)
+        # logger.debug('xxx upper_vertex = %s', vertex)
+
+        return (vertex, None) if isLeftSide else (None, vertex)
+
     else:  # cross sides
-        # TODO calculate both vertices using the corner method
-        corner = get_corner(x_top, y_top)
-        logger.debug("corner top = %s , side = %s", corner, side)
-        if side == "left":
-            result[V.top_right] = (x_top[0], y_top[0])
-            result[V.top_left] = corner
-        else:
-            result[V.top_left] = (x_top[0], y_top[0])
-            result[V.top_right] = corner
+        # TODO calculate both vertices using the vertex method
+        vertex = get_max_distant_point(xx, yy)
+        logger.debug("vertex top = %s , isLeftSide = %s", vertex, isLeftSide)
 
-    # logger.debug("x_bottom = %s", x_bottom)
-    # logger.debug("y_bottom = %s", y_bottom)
-
-    # Process the lower side
-    if (x_bottom[0] - center_x) * (x_bottom[-1] - center_x) > 0:
-        a = np.array([center_x, y_bottom[-1]])
-        b = np.array([x_bottom[0], y_bottom[0]])
-        corner = get_corner(x_bottom, y_bottom, a, b)
-        # logger.debug('xxx bottom_corner = %s', corner)
-
-        # same side
-        if side == "left":
-            result[V.bottom_left] = corner
-        else:
-            result[V.bottom_right] = corner
-    else:
-        # cross sides
-        # TODO calculate both vertices using the corner method
-        corner = get_corner(x_bottom, y_bottom)
-        logger.debug("corner bottom = %s , side = %s", corner, side)
-        if side == "left":
-            result[V.bottom_right] = (x_bottom[-1], y_bottom[-1])
-            result[V.bottom_left] = corner
-        else:
-            result[V.bottom_left] = (x_bottom[-1], y_bottom[-1])
-            result[V.bottom_right] = corner
-
-    return result
+        vertex2 = (xx[v2_index], yy[v2_index])
+        return (vertex, vertex2) if isLeftSide else (vertex2, vertex)
 
 
 def distance(a, b, p):
-    """ segment line AB, point P, where each one is an array([x, y]) """
-    if all(a == p) or all(b == p):  # TODO delete this check if it takes time
+    """Distance between point "p" and line of "ab"
+
+    :param a: np.array([int, int]) first edge a of segment line "ab".
+    :param b: np.array([int, int]) second edge a of segment line "ab"
+    :param p: np.array([int, int])
+    :return: real, the distance from point "p" to line passes through "ab" segment
+    """
+    if all(a == p) or all(b == p):  # TODO unnecessary check, write tests to test optimization benefit of it
         return 0
     return norm(np.cross(b - a, a - p)) / norm(b - a)
 
 
-def get_corner(x, y, a=None, b=None):
+def get_max_distant_point(x, y, a=None, b=None):
+    """
+    Given "ab" line segment and collection of ordered points with coordinates x and y, choose the point
+    which has the maximum distant from the line passes through "ab",
+    if "a" and "b" were not given then set "a" point to be the first point of the collection
+    and "b" point to be the last one
+
+    :param x: np.array([int,...int]), x coordinates of points.
+    :param y: np.array([int,...int]), y coordinates of points.
+    :param a: np.array([int, int]), optional, edge of line segment,
+        if None then set it to the first point (x0, y0)
+    :param b: np.array([int, int]), optional, edge of line segment,
+        if None then set it to the last point (x0, y0)
+    :return:np.array([int, int]) max distant point from "ab" segment
+    """
     if a is None:
         a = np.array([x[0], y[0]])
     if b is None:
         b = np.array([x[-1], y[-1]])
-    # logger.debug("a = %s, b = %s", a, b)
     points = np.column_stack((x, y))
     distances = [distance(a, b, p) for p in points]
-    # logger.debug("corner points = %s", points)
-    # logger.debug("corner distan = %s", distances)
     mx_index = np.argmax(distances)
     return x[mx_index], y[mx_index]
 
 
-def get_four_corners(img_filtered):
+def get_four_vertices(img_filtered):
     # img_filtered = thresh_otsu(img)
     # plt.subplot(121), plt.imshow(img, 'gray'), plt.title('Input')
     # plt.subplot(122), plt.imshow(img_filtered, 'gray'), plt.title('Sheet')
@@ -200,26 +185,17 @@ def get_four_corners(img_filtered):
 
     logger.debug("processing left side")
     # l_result = process_side(x_left, y, center_x, side="left")
-    l_result = process_side_distance(x_left, y, center_x, side="left")
-    logger.debug('left_side_corners = %s', l_result)
+    l_result = get_vertices_from_side(x_left, y, center_x, is_left_side=True)
+    logger.debug('left_side_vertices = %s', l_result)
 
     logger.debug("processing right side")
     # r_result = process_side(x_right, y, center_x, side="right")
-    r_result = process_side_distance(x_right, y, center_x, side="right")
-    logger.debug('right_side_corners = %s', r_result)
+    r_result = get_vertices_from_side(x_right, y, center_x, is_left_side=False)
+    logger.debug('right_side_vertices = %s', r_result)
 
-    four_points = merge_results(l_result, r_result)
+    four_points = merge_vertices(l_result, r_result)
     logger.debug("four points = %s", four_points)
     return four_points
-
-    # three_points = EDGE.get_three_points(left_side, ynz)
-    # logger.debug('three_points = %s', three_points)
-    # lside = EDGE.get(three_points, center)
-    #
-    # print(lside)
-    # print('nz : {nz}'.format(**locals()))
-    # print('top_side : {top_side}'.format(**locals()))
-    # print('bottom  : {bottom_side}'.format(**locals()))
 
 
 def marker_filter(img, blur_param=(14, 1), median_param=conf.marker_filter_median_blur):
@@ -239,81 +215,123 @@ def thresh_otsu(img):
     return dilate
 
 
-def merge_results(left, right):
+def merge_vertices(left_vertices, right_vertices):
+    """
+    Merge vertices results obtained from the left side and the right one, duplicate vertices could happen,
+    then choose the better accurate ones
+    :param left_vertices: dictionary, {V.Key => (x, y)}
+    :param right_vertices: dictionary, {V.Key => (x, y)}
+    :return: dictionary {V.KEY => (x,y)}, contains four points for the four vertices
+    """
     result = {}
-    result.update(left)
-    result.update(right)
-    result[V.top_left] = left[V.top_left]
-    result[V.bottom_left] = left[V.bottom_left]
-    result[V.top_right] = right[V.top_right]
-    result[V.bottom_right] = right[V.bottom_right]
+    result.update(left_vertices)  # TODO to be deleted later
+    result.update(right_vertices)  # TODO to be deleted later
+    result[V.TOP_LEFT] = left_vertices[V.TOP_LEFT]
+    result[V.BOTTOM_LEFT] = left_vertices[V.BOTTOM_LEFT]
+    result[V.TOP_RIGHT] = right_vertices[V.TOP_RIGHT]
+    result[V.BOTTOM_RIGHT] = right_vertices[V.BOTTOM_RIGHT]
     return result
 
 
 def transform(img, vertices, shape, show=False):
-    # pts1 = np.float32([[top_left], [top_right], [bottom_left], [bottom_right]])
-    # pts1 = np.float32([[71, 81], [491, 68], [35, 515], [520, 520]])
-    pts1 = np.float32([vertices[V.top_left], vertices[V.top_right],
-                       vertices[V.bottom_left], vertices[V.bottom_right]])
+    """
+     Wrap the region of answer sheet inside "img" into new image image with fized size defined in "shape"
+
+    :param img: opencv image, gray, contains the answer sheet
+    :param vertices: dictionary, four point vertices of the answer sheet
+    :param shape: array[width, height], size of resulting image
+    :param show: boolean, for debugging purposes TODO delete later
+    :return: opencv image, fixed size as in shape
+    """
+    pts1 = np.float32([vertices[V.TOP_LEFT], vertices[V.TOP_RIGHT],
+                       vertices[V.BOTTOM_LEFT], vertices[V.BOTTOM_RIGHT]])
 
     # pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
     pts2 = np.float32([[0, 0], [shape[0], 0], [0, shape[1]], shape])
 
-    M = cv2.getPerspectiveTransform(pts1, pts2)
+    m_transform = cv2.getPerspectiveTransform(pts1, pts2)
+    dst = cv2.warpPerspective(img, m_transform, tuple(shape))
 
-    # dst = cv2.warpPerspective(img, M, (output width, height))
-    dst = cv2.warpPerspective(img, M, tuple(shape))
-
-    if show:
+    if show:  # TODO delete later
         plt.subplot(121), plt.imshow(img, 'gray'), plt.title('Input')
         plt.subplot(122), plt.imshow(dst, 'gray'), plt.title('Output')
         plt.show()
     return dst
 
 
-def add_shift(vertices, shift):
+def add_shift(vertices, x_shift):
+    """
+    Experimental, shift answer sheet left vertices to include vertical full black strip,
+    might help in next step of locating markers,
+
+    :param vertices: dictionary of four entries
+    :param x_shift: int, ammount to shift left, (defined in configuration class)
+    :return: dictionary of vertices with left ones shifted by x_shift
+    """
+    # TODO delete whole method after tuning the settings in configuration class
     result = {key: value for key, value in vertices.items()}
-
-    x0, y0 = result[V.top_left]
-    result[V.top_left] = (x0 + shift, y0)
-
-    x1, y1 = result[V.bottom_left]
-    result[V.bottom_left] = (x1 + shift, y1)
-
+    x1, y1 = result[V.TOP_LEFT]
+    result[V.TOP_LEFT] = (x1 + x_shift, y1)
+    x2, y2 = result[V.BOTTOM_LEFT]
+    result[V.BOTTOM_LEFT] = (x2 + x_shift, y2)
     return result
 
 
 def slide_marker(img, y_step, windows_y):
+    # TODO to be deleted later
     height, width = img.shape
     for y in range(0, height, y_step):
         yield (y, img[y:y + windows_y, 0:width])
 
 
-def filter_marker_y_padding(mrkr, padding_top, padding_bottom):
-    return mrkr[(mrkr > padding_top) & (mrkr < padding_bottom)]
+def filter_marker_y_padding(markers_y_indexes, padding_y_top, padding_y_bottom):
+    """
+    Filter the markers indexes for padding space in the top and bottom of answer sheet
+
+    :param markers_y_indexes:
+    :param padding_y_top:
+    :param padding_y_bottom:
+    :return:
+    """
+    return markers_y_indexes[(markers_y_indexes > padding_y_top)
+                             & (markers_y_indexes < padding_y_bottom)]
 
 
-def get_ups(a, avg_smoothed, spacing=0):
-    a0 = a[:-1]
-    a1 = a[1:]
-    id_up = np.where((a0 < (avg_smoothed - spacing))
-                     & (a1 > avg_smoothed + spacing))[0]
-    return id_up
+def get_crossing_downs_ups(values, avg, spacing=3):
+    """
+    Get the indexes of points in array "values" where they cross the avg line downward and upwards
 
+    :param values: np.array(long)
+    :param avg: int or np.array, fixed or moving average
+    :param spacing: int, optional, trying to reduce noise
+    :return: tuple(np.array, np.array),
+        :id_down: indexes of crossing downward points,
+        :id_up: indexes of crossing upward points,
+    """
+    a0 = values[:-1]
+    a1 = values[1:]
+    avg_plus = avg + spacing
+    avg_minus = avg - spacing
 
-def get_down_ups(a, avg_smoothed, spacing=3):
-    a0 = a[:-1]
-    a1 = a[1:]
-    id_up = np.where((a0 < (avg_smoothed - spacing))
-                     & (a1 > avg_smoothed + spacing))[0]
+    id_down = np.where((a0 > avg_plus)
+                       & (a1 < avg_minus))[0]
 
-    id_down = np.where((a0 > (avg_smoothed + spacing))
-                       & (a1 < (avg_smoothed - spacing)))[0]
+    id_up = np.where((a0 < avg_minus)
+                     & (a1 > avg_plus))[0]
+
     return id_down, id_up
 
 
+def get_crossing_ups(a, avg, spacing=0):
+    a0 = a[:-1]
+    a1 = a[1:]
+    id_up = np.where((a0 < (avg - spacing))
+                     & (a1 > avg + spacing))[0]
+    return id_up
+
+
 def get_markers(a, avg_smoothed, spacing=3):
-    id_down, id_up = get_down_ups(a, avg_smoothed, spacing)
+    id_down, id_up = get_crossing_downs_ups(a, avg_smoothed, spacing)
     logger.debug("id_up befor filtering = %s ", len(id_up))
 
     id_up = filter_marker_y_padding(id_up, conf.marker_y_padding_top,
@@ -346,15 +364,6 @@ def get_markers(a, avg_smoothed, spacing=3):
     # return np.array(r)
     # return np.stack((id_down, id_up), axis=1)
 
-
-def avg_marker_height(markers):
-    import math
-    # assert len(markers) == 63
-    h = [j - i for i, j in markers]
-    logger.debug('h = %s', h)
-    return np.average(h)
-
-
 def draw_vertices(img, vertices):
     for k, v in vertices.items():
         cv2.circle(img, v, 4, [255, 255, 255], 4)
@@ -380,14 +389,20 @@ def get_marker_x0_x1(marker_roi):
 
     sum_marker = marker_roi.sum(0)
     sum_marker_avg = np.average(sum_marker)
-    id_down, id_up = get_down_ups(sum_marker, sum_marker_avg)
+    id_down, id_up = get_crossing_downs_ups(sum_marker, sum_marker_avg)
 
     if len(id_down) == 0 and len(id_up) < 2:
         logger.debug('marker id_down = %s, %s', len(id_down), id_down)
         logger.debug('marker id_up = %s, %s', len(id_up), id_up)
+        plt.imshow(marker_roi, 'gray')
+        plt.show()
         raise Exception(" up, down, error")
 
-    return id_down[0], id_up[1]
+    if len(id_up) == 1:
+        return id_down[0], id_up[0]
+    else:
+
+        return id_down[0], id_up[1]
 
 
 def draw_markers(sheet, markers):
@@ -412,7 +427,7 @@ def calibre_vertical(center_x=None, roi=None):
     ret3, bin_roi = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     y_sum = bin_roi.sum(1) / width
 
-    down, ups = get_down_ups(y_sum, 160, spacing=0)
+    down, ups = get_crossing_downs_ups(y_sum, 160, spacing=0)
     logger.debug("marker_calibre down = %s, ups = %s", down, ups)
     assert len(ups) == 1 and len(down) == 1
 
@@ -430,12 +445,17 @@ def calibrate_with_marker(marker, sheet,
                           marker_calibre=conf.marker_calibre_range):
     sec = Section.of(marker, marker_shift)
     img = sec.crop(sheet)
-    # img = cv2.blur(img, (3,10))
-    # ret, img = cv2.threshold(img, 160, 255, cv2.THRESH_BINARY)
+    # img = cv2.blur(img, (1,1))
+    # ret, img = cv2.threshold(img, 150, 255, cv2.THRESH_BINARY)
 
     x_sum = img.sum(0) / sec.height()
 
-    id_up = get_ups(x_sum, 168)
+    id_up = get_crossing_ups(x_sum, 150)  # TODO adjust the average params
+
+    if len(id_up) == 0:
+        logger.debug('get_ups: %s', id_up)
+        plt.imshow(img, 'gray')
+        plt.show()
     border = id_up[-1]
 
     print(marker.id, id_up)
@@ -472,7 +492,8 @@ def calibrate_with_marker(marker, sheet,
 
 if __name__ == '__main__':
 
-    file_path = '../data/colored/6.jpg'
+    # file_path = '../data/colored/6.jpg'
+    file_path = '../data/in2/01.jpg'
     img = cv2.imread(file_path, 0)
     # plt.imshow(img, 'gray')
     # plt.show()
@@ -483,7 +504,7 @@ if __name__ == '__main__':
     # plt.imshow(img_otsu, 'gray'), plt.title('otsu')
     # plt.show()
 
-    vertices = get_four_corners(img_otsu)
+    vertices = get_four_vertices(img_otsu)
     # v_shifted = add_shift(vertices, conf.marker_l_shift)
     # v_shifted =  vertices
     # draw_vertices(img, vertices)
@@ -574,7 +595,3 @@ if __name__ == '__main__':
     plt.subplot(235), plt.imshow(sheet_type, 'gray'), plt.title('type')
     plt.subplot(236), plt.imshow(sheet_one, 'gray'), plt.title('one')
     plt.show()
-    # border(img)
-    # img_filtered = pre_filters(img)
-    # findCorners(img_filtered)
-    # print('done')
