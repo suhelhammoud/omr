@@ -1,11 +1,12 @@
 import logging
-from omr_utils import *
+
 import cv2
-import numpy as np
+# import numpy as np
 from matplotlib import pyplot as plt
 from numpy.linalg import norm
+
 from Configuration import OmrConfiguration as conf, Marker, Section
-import math
+from omr_utils import *
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -18,169 +19,156 @@ class V:
     bottom_right = "bottom_right"
 
 
+class NoBorderError(Exception):
+    pass
+
+
 def get_page_vertical_sides(img):
+    """
+    Get the index of first and last none-zero values for each row in image 'img'
+
+    :param img: gray binary image
+    :return ynz: y indexes where x have none-zero value
+            l_side, r_side: x indexes for both sides
+            forn abnoraml borders return None
+    """
     height, width = img.shape
     left_side = np.argmax(img, axis=1)
     right_side = width - np.argmax(img[:, ::-1], axis=1)
     assert len(left_side) == len(right_side) == height
 
     ynz = np.nonzero(left_side)[0]
-
-    # rleft = nz_point_side(left_side)
-    # rright= nz_point_side(right_side)
-    return ynz, left_side[ynz], right_side[ynz]
-
-
-def stack(nz, side):
-    return np.stack((nz, side), axis=1)
+    l_side = left_side[ynz]
+    r_side = right_side[ynz]
+    if np.all(ynz) and np.all(l_side) and np.all(r_side):
+        return ynz, l_side, r_side
+    else:
+        return None
 
 
 def get_middle_point(x, y):
+    """
+    Roughly get the middle point of line of x, y coordinates
+
+    :param x: np.array([int]), x array coordinates
+    :param y: np.array([int]), y array coordinates
+    :return: (x_center, y_center)
+    """
     half = int(len(x) / 2)
     return x[half], y[half]
 
 
 def get_center(left_x, right_x, ynz):
+    """
+    Get roughly center of captured image
+
+    :param left_x: np.array([int])
+    :param right_x: np.array([int])
+    :param ynz: np.array([int])
+    :return: (x_center, y_center)
+    """
     l_point = get_middle_point(left_x, ynz)
     r_point = get_middle_point(right_x, ynz)
     assert l_point[1] == r_point[1]
     return int((l_point[0] + r_point[0]) / 2), l_point[1]
 
 
-def split_list(a_list):
+def split_list_in_half(a_list):
     half = int(len(a_list) / 2)
     return a_list[:half], a_list[half:]
 
 
-def process_side(x, y, center_x, side="left"):
+def get_corners_from_side(xx, yy, center_x, isLeftSide=True):
+    """
+    Get corners of the side, depending on the number of line segments exist in the side,
+     the number of corners takes one of 2, 3, or 4
+
+    :param xx: np.array, x coordinates of side
+    :param yy: np.array, y coordinates of side
+    :param center_x: integer, x coordinate of roughly middle point between left and right sides
+    :param side_direction: string, "left" or "right"
+    :return: dictionary of 2, 3, or 4 points which represent the vertices of the side
+    """
     result = {}
-    # middle_point = get_middle_point(x, y)
 
-    x_top, x_bottom = split_list(x)
-    y_top, y_bottom = split_list(y)
-    # logger.debug("x_top = %s", x_top)
-    # logger.debug("y_top = %s", y_top)
+    xx_top, xx_bottom = split_list_in_half(xx)
+    yy_top, yy_bottom = split_list_in_half(yy)
 
-    # Process the upper side
-    if (x_top[0] - center_x) * (x_top[-1] - center_x) > 0:
-        # same side
-        if side == "left":
-            result[V.top_left] = (x_top[0], y_top[0])
-        else:
-            result[V.top_right] = (x_top[0], y_top[0])
-    else:  # cross sides
-        corner = get_corner(x_top, y_top)
-        logger.debug("corner top = %s , side = %s", corner, side)
-        if side == "left":
-            result[V.top_right] = (x_top[0], y_top[0])
-            result[V.top_left] = corner
-        else:
-            result[V.top_left] = (x_top[0], y_top[0])
-            result[V.top_right] = corner
+    r_top_left, r_top_right = process_up(xx_top, yy_top, center_x,
+                                         isTopSide=True, isLeftSide=isLeftSide)
+    if not r_top_left is None:
+        result[V.top_left] = r_top_left
+    if not r_top_right is None:
+        result[V.top_right] = r_top_right
 
-    # logger.debug("x_bottom = %s", x_bottom)
-    # logger.debug("y_bottom = %s", y_bottom)
+    v_bottom_left, v_bottom_right = process_up(xx_bottom, yy_bottom, center_x,
+                                               isTopSide=False, isLeftSide=isLeftSide)
+    if not v_bottom_left is None:
+        result[V.bottom_left] = v_bottom_left
 
-    # Process the lower side
-    if (x_bottom[0] - center_x) * (x_bottom[-1] - center_x) > 0:
-        # same side
-        if side == "left":
-            result[V.bottom_left] = (x_bottom[-1], y_bottom[-1])
-        else:
-            result[V.bottom_right] = (x_bottom[-1], y_bottom[-1])
-    else:
-        # cross sides
-        corner = get_corner(x_bottom, y_bottom)
-        logger.debug("corner bottom = %s , side = %s", corner, side)
-        if side == "left":
-            result[V.bottom_right] = (x_bottom[-1], y_bottom[-1])
-            result[V.bottom_left] = corner
-        else:
-            result[V.bottom_left] = (x_bottom[-1], y_bottom[-1])
-            result[V.bottom_right] = corner
+    if not v_bottom_right is None:
+        result[V.bottom_right] = v_bottom_right
 
     return result
 
 
-def process_side_distance(x, y, center_x, side="left"):
-    result = {}
-    # middle_point = get_middle_point(x, y)
-
-    x_top, x_bottom = split_list(x)
-    y_top, y_bottom = split_list(y)
-    # logger.debug("x_top = %s", x_top)
-    # logger.debug("y_top = %s", y_top)
+def process_up(xx, yy, center_x, isTopSide=True, isLeftSide=True):
+    v1_index = -1 if isTopSide else 0
+    v2_index = -1 - v1_index  # 0 or -1
 
     # Process the upper side
-    if (x_top[0] - center_x) * (x_top[-1] - center_x) > 0:
-        a = np.array([center_x, y_top[0]])
-        b = np.array([x_top[-1], y_top[-1]])
-        corner = get_corner(x_top, y_top, a, b)
+    if (xx[v1_index] - center_x) * (xx[v2_index] - center_x) > 0:
+        # same side
+        a = np.array([center_x, yy[v2_index]])
+        b = np.array([xx[v1_index], yy[v1_index]])
+        vertex = get_max_distant_point(xx, yy, a, b)
         # logger.debug('xxx upper_corner = %s', corner)
 
-        # same side
-        if side == "left":
-            result[V.top_left] = corner
-        else:
-            result[V.top_right] = corner
+        return (vertex, None) if isLeftSide else (None, vertex)
+
     else:  # cross sides
         # TODO calculate both vertices using the corner method
-        corner = get_corner(x_top, y_top)
-        logger.debug("corner top = %s , side = %s", corner, side)
-        if side == "left":
-            result[V.top_right] = (x_top[0], y_top[0])
-            result[V.top_left] = corner
-        else:
-            result[V.top_left] = (x_top[0], y_top[0])
-            result[V.top_right] = corner
+        vertex = get_max_distant_point(xx, yy)
+        logger.debug("corner top = %s , isLeftSide = %s", vertex, isLeftSide)
 
-    # logger.debug("x_bottom = %s", x_bottom)
-    # logger.debug("y_bottom = %s", y_bottom)
-
-    # Process the lower side
-    if (x_bottom[0] - center_x) * (x_bottom[-1] - center_x) > 0:
-        a = np.array([center_x, y_bottom[-1]])
-        b = np.array([x_bottom[0], y_bottom[0]])
-        corner = get_corner(x_bottom, y_bottom, a, b)
-        # logger.debug('xxx bottom_corner = %s', corner)
-
-        # same side
-        if side == "left":
-            result[V.bottom_left] = corner
-        else:
-            result[V.bottom_right] = corner
-    else:
-        # cross sides
-        # TODO calculate both vertices using the corner method
-        corner = get_corner(x_bottom, y_bottom)
-        logger.debug("corner bottom = %s , side = %s", corner, side)
-        if side == "left":
-            result[V.bottom_right] = (x_bottom[-1], y_bottom[-1])
-            result[V.bottom_left] = corner
-        else:
-            result[V.bottom_left] = (x_bottom[-1], y_bottom[-1])
-            result[V.bottom_right] = corner
-
-    return result
+        vertex2 = (xx[v2_index], yy[v2_index])
+        return (vertex, vertex2) if isLeftSide else (vertex2, vertex)
 
 
 def distance(a, b, p):
-    """ segment line AB, point P, where each one is an array([x, y]) """
-    if all(a == p) or all(b == p):  # TODO delete this check if it takes time
+    """Distance between point "p" and line of "ab"
+
+    :param a: np.array([int, int]) first edge a of segment line "ab".
+    :param b: np.array([int, int]) second edge a of segment line "ab"
+    :param p: np.array([int, int])
+    :return: real, the distance from point "p" to line passes through "ab" segment
+    """
+    if all(a == p) or all(b == p):  # TODO unnecessary check, write tests to test optimization benefit of it
         return 0
     return norm(np.cross(b - a, a - p)) / norm(b - a)
 
 
-def get_corner(x, y, a=None, b=None):
+def get_max_distant_point(x, y, a=None, b=None):
+    """
+    Given "ab" line segment and collection of ordered points with coordinates x and y, choose the point
+    which has the maximum distant from the line passes through "ab",
+    if "a" and "b" were not given then set "a" point to be the first point of the collection
+    and "b" point to be the last one
+
+    :param x: np.array([int,...int]), x coordinates of points.
+    :param y: np.array([int,...int]), y coordinates of points.
+    :param a: np.array([int, int]), optional, edge of line segment,
+        if None then set it to the first point (x0, y0)
+    :param b: np.array([int, int]), optional, edge of line segment,
+        if None then set it to the last point (x0, y0)
+    :return:np.array([int, int]) max distant point from "ab" segment
+    """
     if a is None:
         a = np.array([x[0], y[0]])
     if b is None:
         b = np.array([x[-1], y[-1]])
-    # logger.debug("a = %s, b = %s", a, b)
     points = np.column_stack((x, y))
     distances = [distance(a, b, p) for p in points]
-    # logger.debug("corner points = %s", points)
-    # logger.debug("corner distan = %s", distances)
     mx_index = np.argmax(distances)
     return x[mx_index], y[mx_index]
 
@@ -200,12 +188,12 @@ def get_four_corners(img_filtered):
 
     logger.debug("processing left side")
     # l_result = process_side(x_left, y, center_x, side="left")
-    l_result = process_side_distance(x_left, y, center_x, side="left")
+    l_result = get_corners_from_side(x_left, y, center_x, isLeftSide=True)
     logger.debug('left_side_corners = %s', l_result)
 
     logger.debug("processing right side")
     # r_result = process_side(x_right, y, center_x, side="right")
-    r_result = process_side_distance(x_right, y, center_x, side="right")
+    r_result = get_corners_from_side(x_right, y, center_x, isLeftSide=False)
     logger.debug('right_side_corners = %s', r_result)
 
     four_points = merge_results(l_result, r_result)
@@ -348,7 +336,6 @@ def get_markers(a, avg_smoothed, spacing=3):
 
 
 def avg_marker_height(markers):
-    import math
     # assert len(markers) == 63
     h = [j - i for i, j in markers]
     logger.debug('h = %s', h)
@@ -382,7 +369,7 @@ def get_marker_x0_x1(marker_roi):
     sum_marker_avg = np.average(sum_marker)
     id_down, id_up = get_down_ups(sum_marker, sum_marker_avg)
 
-    if len(id_down) == 0 and len(id_up) < 2 :
+    if len(id_down) == 0 and len(id_up) < 2:
         logger.debug('marker id_down = %s, %s', len(id_down), id_down)
         logger.debug('marker id_up = %s, %s', len(id_up), id_up)
         plt.imshow(marker_roi, 'gray')
@@ -441,14 +428,13 @@ def calibrate_with_marker(marker, sheet,
 
     x_sum = img.sum(0) / sec.height()
 
-    id_up = get_ups(x_sum, 150) # TODO adjust the average params
+    id_up = get_ups(x_sum, 150)  # TODO adjust the average params
 
     if len(id_up) == 0:
         logger.debug('get_ups: %s', id_up)
         plt.imshow(img, 'gray')
         plt.show()
     border = id_up[-1]
-
 
     print(marker.id, id_up)
 
