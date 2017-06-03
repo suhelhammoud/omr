@@ -91,15 +91,15 @@ def get_vertices_from_side(xx, yy, center_x, is_left_side=True):
     xx_top, xx_bottom = split_list_in_half(xx)
     yy_top, yy_bottom = split_list_in_half(yy)
 
-    r_top_left, r_top_right = process_up(xx_top, yy_top, center_x,
-                                         isTopSide=True, isLeftSide=is_left_side)
+    r_top_left, r_top_right = process_sub_side(xx_top, yy_top, center_x,
+                                               isTopSide=True, isLeftSide=is_left_side)
     if not r_top_left is None:
         result[V.TOP_LEFT] = r_top_left
     if not r_top_right is None:
         result[V.TOP_RIGHT] = r_top_right
 
-    v_bottom_left, v_bottom_right = process_up(xx_bottom, yy_bottom, center_x,
-                                               isTopSide=False, isLeftSide=is_left_side)
+    v_bottom_left, v_bottom_right = process_sub_side(xx_bottom, yy_bottom, center_x,
+                                                     isTopSide=False, isLeftSide=is_left_side)
     if not v_bottom_left is None:
         result[V.BOTTOM_LEFT] = v_bottom_left
 
@@ -109,7 +109,7 @@ def get_vertices_from_side(xx, yy, center_x, is_left_side=True):
     return result
 
 
-def process_up(xx, yy, center_x, isTopSide=True, isLeftSide=True):
+def process_sub_side(xx, yy, center_x, isTopSide=True, isLeftSide=True):
     v1_index = -1 if isTopSide else 0
     v2_index = -1 - v1_index  # 0 or -1
 
