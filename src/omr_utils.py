@@ -2,7 +2,6 @@
 import numpy as np
 
 
-
 def smooth(x, window_len=150, window='flat'):
     """smooth the data using a window with requested size.
 
@@ -33,6 +32,8 @@ def smooth(x, window_len=150, window='flat'):
 
     TODO: the window parameter could be the window itself if an array instead of a string
     NOTE: length(output) != length(input), to correct this: return y[(window_len/2-1):-(window_len/2)] instead of just y.
+
+    # Ref: http://scipy-cookbook.readthedocs.io/items/SignalSmooth.html
     """
 
     assert x.ndim == 1
@@ -54,4 +55,3 @@ def smooth(x, window_len=150, window='flat'):
     y = np.convolve(w / w.sum(), s, mode='valid')
     # return y
     return y[int(window_len / 2 - 1):-int(window_len / 2) - 1]
-
