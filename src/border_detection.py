@@ -478,7 +478,7 @@ def calibrate_with_marker(marker, sheet,
 if __name__ == '__main__':
 
     # file_path = '../data/colored/6.jpg'
-    file_path = '../data/in2/01.jpg'
+    file_path = '../data/in2/14.jpg'
     img = cv2.imread(file_path, 0)
     # plt.imshow(img, 'gray')
     # plt.show()
