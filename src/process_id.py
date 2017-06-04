@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def otsu_id_filter(img, kernel = 1):
+def otsu_id_filter(img, kernel=1):
     blur = cv2.medianBlur(img, kernel, 0)  # TODO adjust the kernel
     # blur = img
     _, th3 = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -20,15 +20,20 @@ def otsu_id_filter(img, kernel = 1):
 def get_x_splits(start, end):
     assert end > start
     delta = (end - start) / 10
-    return [start + int(i * delta) for i in range(11)]
+    return [start + int(i * delta + delta / 2) for i in range(10)]
 
-def get_y_splits(start, end):
-    pass
+
+def filter_y_splits(downs, ups):
+    ends = downs[1:11]
+    starts = ups[0:10]
+    return [int((start + end) / 2) for start, end in zip(starts, ends)]
+
+    # return ends, starts
 
 
 def id_box_border(img, debug=False):
     height, width = img.shape
-    img_x = otsu_id_filter(img, kernel= 1)
+    img_x = otsu_id_filter(img, kernel=1)
     sum_x = np.sum(img_x, axis=0) / height
 
     x_downs, x_ups = get_crossing_downs_ups(sum_x, 250)
@@ -38,12 +43,24 @@ def id_box_border(img, debug=False):
 
     x_splits = get_x_splits(x_downs[0], x_ups[0])
 
-    img_y = otsu_id_filter(img, kernel= 7)
+    img_y = otsu_id_filter(img, kernel=5)
     sum_y = np.sum(img_y, axis=1) / width
-    y_downs, y_ups = get_crossing_downs_ups(sum_y, 240, spacing=0)
-    if not len(y_downs)> 0 and not len(y_ups) > 0:
-        logger.error("y_downs: %s, y_ups: %s", y_downs, y_ups)
+    y_starts, y_ends = get_crossing_downs_ups(sum_y, 240, spacing=0)
+    if not len(y_starts) > 0 and not len(y_ends) > 0:
+        logger.error("y_starts: %s, y_ends: %s", y_starts, y_ends)
         raise IDError("Could not locate the horizontal borders of ID box")
+
+    # slicing sum_y : [y_starts[0]: y_ends[0]]
+    m_avg = np.average(sum_y[50: 285]) - 10
+    logger.debug("moving avg: %s", m_avg)
+    y_downs, y_ups = get_crossing_downs_ups(sum_y, m_avg, spacing=0)
+    logger.debug("y_donws: %s, y_ups: %s", len(y_downs), len(y_ups))
+
+    y_splits = filter_y_splits(y_downs, y_ups)
+
+    if len(y_splits) < 10:
+        raise IDError('Not enough y_split markers: %s' % len(y_splits))
+
 
     if debug:
         vis_x = img_x.copy()
@@ -54,8 +71,17 @@ def id_box_border(img, debug=False):
         plt.subplot(223), plt.plot(sum_x, 'r'), plt.title('sum_x')
         for x in x_splits:
             plt.axvline(x=x)  # draw vertical lines in chart on xs
-            cv2.line(vis_x, (x, 0), (x, height), (255, 255, 255), 1)
+            cv2.line(vis_y, (x, 0), (x, height), (255, 255, 255), 1)
         plt.subplot(224), plt.plot(sum_y, 'b'), plt.title('sum_y')
+        plt.axhline(y=m_avg)
+        for y in y_splits:
+            plt.axvline(x=y)  # draw vertical lines in chart on xs
+            cv2.line(vis_y, (0, y), (width, y), (0, 0, 0), 1)
+
+        # for x in y_ups:
+        #     plt.axvline(x=x)  # draw vertical lines in chart on xs
+        #     cv2.line(vis_y, (0, x), (width, x), (255, 255, 255), 1)
+
         plt.show()
 
     return x_splits
@@ -63,7 +89,6 @@ def id_box_border(img, debug=False):
 
 def process_id(id_marker, img):
     height, width = img.shape
-
 
     x_splits = id_box_border(img, debug=True)
 
