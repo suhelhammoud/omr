@@ -10,13 +10,6 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def otsu_id_filter(img, kernel=1):
-    blur = cv2.medianBlur(img, kernel, 0)  # TODO adjust the kernel
-    # blur = img
-    _, th3 = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    return th3
-
-
 def get_x_splits(start, end):
     # assert end > start
     delta = (end - start) / 10
@@ -28,14 +21,27 @@ def filter_y_splits(downs, ups):
     starts = ups[0:10]
     return [int((start + end) / 2) for start, end in zip(starts, ends)]
 
-    # return ends, starts
 
+def id_blob_coverage(img, x, y, threshold=None):
+    """
+    Percentage of marking coverage. Ideally, if marked, then coverage = 1.0 (black),
+    if not marked at all then coverage = 0.0 (white)
 
-def count_id_blob(img, x, y):
+    :param img: roi contains roughly the id_box
+    :param x: int, blob x coordinates
+    :param y: int, blob y coordinates
+    :param threshold: float (optional), used to return either 0.0 or 1.0 values
+    :return: marking percentage, value between 1.0 (fully marked) and 0.0 (not marked).
+        If threshold is applied then return either 1.0 (fully marked) or 0.0 (not marked)
+    """
     delta_y = 3
     delta_x = 4
     norm = 4 * delta_x * delta_y * 255
-    return np.sum(img[y - delta_y: y + delta_y, x - delta_x: x + delta_x]) / norm
+    covarage = 1 - (np.sum(img[y - delta_y: y + delta_y, x - delta_x: x + delta_x]) / norm)  # inverse percent level
+    if threshold is None:
+        return covarage
+
+    return 1 if covarage >= threshold else 0
 
 
 def calc_id_number(img, x_splits, y_splits):
@@ -47,8 +53,8 @@ def calc_id_number(img, x_splits, y_splits):
         m_count = 0
         for idy, y in enumerate(y_splits):
             m_count = 0
-            count = count_id_blob(img, x, y)
-            if count < .15:
+            coverage = id_blob_coverage(img, x, y, .85)
+            if coverage == 1:  # marked
                 digit = idy
                 m_count += 1
                 if m_count > 1:
@@ -59,9 +65,9 @@ def calc_id_number(img, x_splits, y_splits):
     return result
 
 
-def id_box_border(img, debug=False):
+def process_id(img, debug=False):
     height, width = img.shape
-    img_x = otsu_id_filter(img, kernel=1)
+    img_x = otsu_filter(img, blur_kernel=1)
     sum_x = np.sum(img_x, axis=0) / height
 
     x_downs, x_ups = get_crossing_downs_ups(sum_x, 240)
@@ -72,7 +78,7 @@ def id_box_border(img, debug=False):
     x_shift_correction = 3
     x_splits = get_x_splits(x_downs[0] + x_shift_correction, x_ups[0])
 
-    img_y = otsu_id_filter(img, kernel=5)
+    img_y = otsu_filter(img, blur_kernel=5)
     sum_y = np.sum(img_y, axis=1) / width
     y_starts, y_ends = get_crossing_downs_ups(sum_y, 240, spacing=0)
     if not len(y_starts) > 0 and not len(y_ends) > 0:
@@ -87,26 +93,13 @@ def id_box_border(img, debug=False):
 
     y_splits = filter_y_splits(y_downs, y_ups)
 
-    # id_blobs = [get_id_blob(img_y, x, y) for y in y_splits for x in x_splits]
-    #
-    # for x in range(10):
-    #     for y in range(10):
-    #         id_blob = get_id_blob(img_y, y_splits[y], x_splits[x])
-    #         index = 10* x +y
-    #         plt.subplot(10, 10, index + 1)
-    #         plt.imshow(id_blob, 'gray')
-    #         plt.title('(%s,%s)' % (x, y))
-    #         plt.show()
-    # plt.show()
-
     if len(y_splits) < 10:
         raise IDError('Not enough y_split markers: %s' % len(y_splits))
 
     id_number = calc_id_number(img_y, x_splits, y_splits)
-    logger.debug('id number = %s', id_number)
+    logger.info('id_number = %s', id_number)
 
     if debug:
-        vis_x = img_x.copy()
         vis_y = img_y.copy()
 
         plt.subplot(221), plt.imshow(img, 'gray'), plt.title('img_x')
@@ -121,29 +114,6 @@ def id_box_border(img, debug=False):
             plt.axvline(x=y)  # draw vertical lines in chart on xs
             cv2.line(vis_y, (0, y), (width, y), (0, 0, 0), 1)
 
-        for x in x_splits:
-            for y in y_splits:
-                count = count_id_blob(img_y, x, y)
-                # print('%2.4s' % str(count), '\t', end='')
-                # cv2.circle(vis_y, (x, y), 3, [170, 170, 170], 3)
-                # print('')
-
-        # for x in y_ups:
-        #     plt.axvline(x=x)  # draw vertical lines in chart on xs
-        #     cv2.line(vis_y, (0, x), (width, x), (255, 255, 255), 1)
-
         plt.show()
 
     return id_number
-
-
-def process_id(id_marker, img):
-    height, width = img.shape
-
-    id_number = id_box_border(img, debug=False)
-    print(id_number)
-    assert id_number == 7036093052
-
-
-if __name__ == '__main__':
-    print("process name")

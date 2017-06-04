@@ -21,3 +21,7 @@ class IDError(Exception):
 
 class SheetTypeError(Exception):
     pass
+
+
+class SheetNoTypeFoundError(Exception):
+    pass

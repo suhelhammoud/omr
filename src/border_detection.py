@@ -1,4 +1,3 @@
-
 import cv2
 # import numpy as np
 from matplotlib import pyplot as plt
@@ -8,8 +7,9 @@ from Configuration import OmrConfiguration as conf, Marker, Section
 from omr_utils import *
 from OmrExceptions import *
 from process_id import process_id
-
+from process_type import process_type
 import logging
+
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -223,14 +223,6 @@ def marker_filter(img, blur_param=(14, 1), median_param=3):
     return th
 
 
-def thresh_otsu(img):
-    blur = cv2.medianBlur(img, 17, 0)
-    ret3, th3 = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    # kernel = np.ones((30, 30), np.uint8)
-    # dilate = cv2.dilate(th3, kernel, iterations=1)
-    dilate = th3
-    return dilate
-
 
 def merge_vertices(left_vertices, right_vertices):
     """
@@ -312,8 +304,6 @@ def filter_marker_y_padding(markers_y_indexes, padding_y_top, padding_y_bottom):
     """
     return markers_y_indexes[(markers_y_indexes > padding_y_top)
                              & (markers_y_indexes < padding_y_bottom)]
-
-
 
 
 def get_markers(a, avg_smoothed, spacing=3):
@@ -478,14 +468,14 @@ def calibrate_with_marker(marker, sheet,
 if __name__ == '__main__':
 
     # file_path = '../data/colored/6.jpg'
-    file_path = '../data/in2/14.jpg'
+    file_path = '../data/in2/01.jpg'
     img = cv2.imread(file_path, 0)
     # plt.imshow(img, 'gray')
     # plt.show()
     height, width = img.shape
     logger.debug("height %s, width %s", height, width)
 
-    img_otsu = thresh_otsu(img)
+    img_otsu = otsu_filter(img, blur_kernel=17)
     # plt.imshow(img_otsu, 'gray'), plt.title('otsu')
     # plt.show()
 
@@ -503,12 +493,14 @@ if __name__ == '__main__':
     # plt.show()
     # cv2.imwrite('../data/out/sheet.jpg', sheet)
 
-    sheet_id = conf.sec_id.crop(sheet)
 
-    process_id(1, sheet_id)
-    exit(0)
+    sheet_type_img = conf.sec_type.crop(sheet)
+    sheet_type = process_type(sheet_type_img, debug=False)
+    sheet_id_img = conf.sec_id.crop(sheet)
+    sheet_id_number = process_id(sheet_id_img, debug=True)
+    # assert sheet_id_number == 7036093052
+    # exit(0)
 
-    sheet_type = conf.sec_type.crop(sheet)
     sheet_one = conf.sec_one.crop(sheet)
     sheet_marker = conf.sec_marker_column.crop(sheet)
     sheet_marker = marker_filter(sheet_marker,
@@ -584,7 +576,7 @@ if __name__ == '__main__':
     plt.subplot(231), plt.imshow(img, 'gray'), plt.title('Input')
     plt.subplot(232), plt.imshow(vis_sheet, 'gray'), plt.title('Sheet')
     plt.subplot(233), plt.imshow(sheet_marker, 'gray'), plt.title('sheet_marker')
-    plt.subplot(234), plt.imshow(sheet_id, 'gray'), plt.title('Name')
-    plt.subplot(235), plt.imshow(sheet_type, 'gray'), plt.title('type')
+    plt.subplot(234), plt.imshow(sheet_id_img, 'gray'), plt.title('Name')
+    plt.subplot(235), plt.imshow(sheet_type_img, 'gray'), plt.title('type')
     plt.subplot(236), plt.imshow(sheet_one, 'gray'), plt.title('one')
     plt.show()

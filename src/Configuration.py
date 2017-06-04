@@ -40,7 +40,7 @@ class Section:
 class OmrConfiguration:
     rshape = [1000, 1500]
     sec_id = Section(260, 35, 485, 333)
-    sec_type = Section(475, 35, 566, 246)
+    sec_type = Section(478, 35, 566, 246)
     sec_answers = Section(15, 260, 500, 1270)
     sec_one = Section(15, 260, 265, 1270)
     sec_two = Section(260, 260, 500, 1270)
