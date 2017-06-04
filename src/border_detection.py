@@ -116,17 +116,17 @@ def get_vertices_from_side(xx, yy, center_x, is_left_side=True):
 
     r_top_left, r_top_right = process_sub_side(xx_top, yy_top, center_x,
                                                isTopSide=True, isLeftSide=is_left_side)
-    if not r_top_left is None:
+    if r_top_left is not None:
         result[V.TOP_LEFT] = r_top_left
-    if not r_top_right is None:
+    if r_top_right is not None:
         result[V.TOP_RIGHT] = r_top_right
 
     v_bottom_left, v_bottom_right = process_sub_side(xx_bottom, yy_bottom, center_x,
                                                      isTopSide=False, isLeftSide=is_left_side)
-    if not v_bottom_left is None:
+    if v_bottom_left is not None:
         result[V.BOTTOM_LEFT] = v_bottom_left
 
-    if not v_bottom_right is None:
+    if v_bottom_right is not None:
         result[V.BOTTOM_RIGHT] = v_bottom_right
 
     return result
