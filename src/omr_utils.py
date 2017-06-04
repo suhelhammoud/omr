@@ -55,3 +55,36 @@ def smooth(x, window_len=150, window='flat'):
     y = np.convolve(w / w.sum(), s, mode='valid')
     # return y
     return y[int(window_len / 2 - 1):-int(window_len / 2) - 1]
+
+
+def get_crossing_downs_ups(values, avg, spacing=0):
+    """
+    Get the indexes of points in array "values" where they cross the avg line downward and upwards
+
+    :param values: np.array(long)
+    :param avg: int or np.array, fixed or moving average
+    :param spacing: int, optional, trying to reduce noise
+    :return: tuple(np.array, np.array),
+        :id_down: indexes of crossing downward points,
+        :id_up: indexes of crossing upward points,
+    """
+    a0 = values[:-1]
+    a1 = values[1:]
+    avg_plus = avg + spacing
+    avg_minus = avg - spacing
+
+    id_down = np.where((a0 > avg_plus)
+                       & (a1 < avg_minus))[0]
+
+    id_up = np.where((a0 < avg_minus)
+                     & (a1 > avg_plus))[0]
+
+    return id_down, id_up
+
+
+def get_crossing_ups(a, avg, spacing=0):
+    a0 = a[:-1]
+    a1 = a[1:]
+    id_up = np.where((a0 < (avg - spacing))
+                     & (a1 > avg + spacing))[0]
+    return id_up

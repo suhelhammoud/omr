@@ -1,4 +1,3 @@
-import logging
 
 import cv2
 # import numpy as np
@@ -9,6 +8,8 @@ from Configuration import OmrConfiguration as conf, Marker, Section
 from omr_utils import *
 from OmrExceptions import *
 from process_id import process_id
+
+import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
@@ -313,37 +314,6 @@ def filter_marker_y_padding(markers_y_indexes, padding_y_top, padding_y_bottom):
                              & (markers_y_indexes < padding_y_bottom)]
 
 
-def get_crossing_downs_ups(values, avg, spacing=3):
-    """
-    Get the indexes of points in array "values" where they cross the avg line downward and upwards
-
-    :param values: np.array(long)
-    :param avg: int or np.array, fixed or moving average
-    :param spacing: int, optional, trying to reduce noise
-    :return: tuple(np.array, np.array),
-        :id_down: indexes of crossing downward points,
-        :id_up: indexes of crossing upward points,
-    """
-    a0 = values[:-1]
-    a1 = values[1:]
-    avg_plus = avg + spacing
-    avg_minus = avg - spacing
-
-    id_down = np.where((a0 > avg_plus)
-                       & (a1 < avg_minus))[0]
-
-    id_up = np.where((a0 < avg_minus)
-                     & (a1 > avg_plus))[0]
-
-    return id_down, id_up
-
-
-def get_crossing_ups(a, avg, spacing=0):
-    a0 = a[:-1]
-    a1 = a[1:]
-    id_up = np.where((a0 < (avg - spacing))
-                     & (a1 > avg + spacing))[0]
-    return id_up
 
 
 def get_markers(a, avg_smoothed, spacing=3):
@@ -406,7 +376,7 @@ def get_marker_x0_x1(marker_roi):
 
     sum_marker = marker_roi.sum(0)
     sum_marker_avg = np.average(sum_marker)
-    id_down, id_up = get_crossing_downs_ups(sum_marker, sum_marker_avg)
+    id_down, id_up = get_crossing_downs_ups(sum_marker, sum_marker_avg, spacing=3)
 
     if len(id_down) == 0 and len(id_up) < 2:
         logger.debug('marker id_down = %s, %s', len(id_down), id_down)
