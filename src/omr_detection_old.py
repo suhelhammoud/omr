@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 from matplotlib import pyplot as plt
 
+
 class VPoint:
     A = 0
     B = 1
@@ -74,7 +75,6 @@ def getSides(a):
     # a0 = np.nonzero(a0)
     # a1 = np.nonzero(a1)
     return xx, a0, a00, xy, a1, a11
-
 
 
 def law_of_cosines(a, x, b):
@@ -153,8 +153,6 @@ def border(img):
     plt.title('nz scan_y'), plt.xticks([]), plt.yticks([])
 
     plt.show()
-
-
 
 
 def findCorners(img):
@@ -253,7 +251,6 @@ def findCorners(img):
     print("xmax = {xmax}, ymax = {ymax}".format(**locals()))
 
     return (xx, scan_x, scan_xr, xy, scan_y, scan_yr)
-
 
 
 if __name__ == '__main__':

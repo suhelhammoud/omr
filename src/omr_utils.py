@@ -1,5 +1,19 @@
 import numpy as np
 import cv2
+from numpy.linalg import norm
+
+
+def distance(a, b, p):
+    """Distance between point "p" and line of "ab"
+
+    :param a: np.array([int, int]) first edge a of segment line "ab".
+    :param b: np.array([int, int]) second edge a of segment line "ab"
+    :param p: np.array([int, int])
+    :return: real, the distance from point "p" to line passes through "ab" segment
+    """
+    if all(a == p) or all(b == p):  # TODO unnecessary check, write tests to test optimization benefit of it
+        return 0
+    return norm(np.cross(b - a, a - p)) / norm(b - a)
 
 
 def get_crossing_downs_ups(values, avg, spacing=0):

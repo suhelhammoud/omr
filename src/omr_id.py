@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 from omr_utils import *
-from OmrExceptions import *
+from omr_exceptions import *
 
 import logging
 

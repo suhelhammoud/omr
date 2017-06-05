@@ -2,7 +2,7 @@ import logging
 
 from matplotlib import pyplot as plt
 
-from OmrExceptions import *
+from omr_exceptions import *
 from omr_utils import *
 
 logging.basicConfig(level=logging.DEBUG)
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def process_type(img, debug=True):
     height, width = img.shape
-    img_blob = otsu_filter(img, 7)  # TODO adjust kernel later
+    img_blob = otsu_filter(img, blur_kernel=7)  # TODO adjust kernel later
 
     sum_x = np.sum(img_blob, axis=0) / height
     x_downs, x_ups = get_crossing_downs_ups(sum_x, 240)

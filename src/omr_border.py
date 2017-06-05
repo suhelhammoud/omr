@@ -1,27 +1,19 @@
 import cv2
 # import numpy as np
 from matplotlib import pyplot as plt
-from numpy.linalg import norm
 
-from Configuration import OmrConfiguration as conf, Marker, Section
+from omr_configuration import OmrConfiguration as conf, Marker, Section
 from omr_utils import *
-from OmrExceptions import *
-from process_id import process_id
-from process_type import process_type
+from omr_exceptions import *
+from omr_id import process_id
+from omr_type import process_type
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-
-class V:
-    TOP_LEFT = "TOP_LEFT"
-    TOP_RIGHT = "TOP_RIGHT"
-    BOTTOM_LEFT = "BOTTOM_LEFT"
-    BOTTOM_RIGHT = "BOTTOM_RIGHT"
-
-
 """
+    sample right side 
     + <-- vertex  top_left (optional)
      \   
       \   
@@ -37,11 +29,18 @@ class V:
       /
      /
     + <-- vertex bottom_left (optional)
-
+    
 """
 
 
-def get_page_vertical_sides(img):
+class V:
+    TOP_LEFT = "TOP_LEFT"
+    TOP_RIGHT = "TOP_RIGHT"
+    BOTTOM_LEFT = "BOTTOM_LEFT"
+    BOTTOM_RIGHT = "BOTTOM_RIGHT"
+
+
+def _page_vertical_sides(img):
     """
     Get the index of first and last none-zero values for each row in image 'img'
 
@@ -66,7 +65,7 @@ def get_page_vertical_sides(img):
         return xx_left, xx_right, ynz
 
 
-def get_middle_point(xx, yy):
+def _middle_point(xx, yy):
     """
     Roughly get the middle point of line of x, y coordinates
 
@@ -78,7 +77,7 @@ def get_middle_point(xx, yy):
     return xx[half], yy[half]
 
 
-def get_center(xx_left, xx_right, yy_nz):
+def _center(xx_left, xx_right, yy_nz):
     """
     Get roughly center of captured image
 
@@ -87,8 +86,8 @@ def get_center(xx_left, xx_right, yy_nz):
     :param yy_nz: np.array, none-zero values of yy coordinates
     :return: (x_center, y_center)
     """
-    l_point = get_middle_point(xx_left, yy_nz)
-    r_point = get_middle_point(xx_right, yy_nz)
+    l_point = _middle_point(xx_left, yy_nz)
+    r_point = _middle_point(xx_right, yy_nz)
     assert l_point[1] == r_point[1]
     return int((l_point[0] + r_point[0]) / 2), l_point[1]
 
@@ -98,7 +97,7 @@ def split_list_in_half(a_list):
     return a_list[:half], a_list[half:]
 
 
-def get_vertices_from_side(xx, yy, center_x, is_left_side=True):
+def _vertices_from_side(xx, yy, center_x, is_left_side=True):
     """
     Get vertices of the side, depending on the number of line segments exist in the side,
      the resulted vertices might be 2, 3, or 4 ones
@@ -114,15 +113,15 @@ def get_vertices_from_side(xx, yy, center_x, is_left_side=True):
     xx_top, xx_bottom = split_list_in_half(xx)
     yy_top, yy_bottom = split_list_in_half(yy)
 
-    r_top_left, r_top_right = process_sub_side(xx_top, yy_top, center_x,
-                                               isTopSide=True, isLeftSide=is_left_side)
+    r_top_left, r_top_right = _process_sub_side(xx_top, yy_top, center_x,
+                                                isTopSide=True, isLeftSide=is_left_side)
     if r_top_left is not None:
         result[V.TOP_LEFT] = r_top_left
     if r_top_right is not None:
         result[V.TOP_RIGHT] = r_top_right
 
-    v_bottom_left, v_bottom_right = process_sub_side(xx_bottom, yy_bottom, center_x,
-                                                     isTopSide=False, isLeftSide=is_left_side)
+    v_bottom_left, v_bottom_right = _process_sub_side(xx_bottom, yy_bottom, center_x,
+                                                      isTopSide=False, isLeftSide=is_left_side)
     if v_bottom_left is not None:
         result[V.BOTTOM_LEFT] = v_bottom_left
 
@@ -132,7 +131,7 @@ def get_vertices_from_side(xx, yy, center_x, is_left_side=True):
     return result
 
 
-def process_sub_side(xx, yy, center_x, isTopSide=True, isLeftSide=True):
+def _process_sub_side(xx, yy, center_x, isTopSide=True, isLeftSide=True):
     v1_index = -1 if isTopSide else 0
     v2_index = -1 - v1_index  # 0 or -1
 
@@ -141,34 +140,21 @@ def process_sub_side(xx, yy, center_x, isTopSide=True, isLeftSide=True):
         # same side
         a = np.array([center_x, yy[v2_index]])
         b = np.array([xx[v1_index], yy[v1_index]])
-        vertex = get_max_distant_point(xx, yy, a, b)
+        vertex = _max_distant_point(xx, yy, a, b)
         # logger.debug('xxx upper_vertex = %s', vertex)
 
         return (vertex, None) if isLeftSide else (None, vertex)
 
     else:  # cross sides
         # TODO calculate both vertices using the vertex method
-        vertex = get_max_distant_point(xx, yy)
+        vertex = _max_distant_point(xx, yy)
         logger.debug("vertex top = %s , isLeftSide = %s", vertex, isLeftSide)
 
         vertex2 = (xx[v2_index], yy[v2_index])
         return (vertex, vertex2) if isLeftSide else (vertex2, vertex)
 
 
-def distance(a, b, p):
-    """Distance between point "p" and line of "ab"
-
-    :param a: np.array([int, int]) first edge a of segment line "ab".
-    :param b: np.array([int, int]) second edge a of segment line "ab"
-    :param p: np.array([int, int])
-    :return: real, the distance from point "p" to line passes through "ab" segment
-    """
-    if all(a == p) or all(b == p):  # TODO unnecessary check, write tests to test optimization benefit of it
-        return 0
-    return norm(np.cross(b - a, a - p)) / norm(b - a)
-
-
-def get_max_distant_point(x, y, a=None, b=None):
+def _max_distant_point(x, y, a=None, b=None):
     """
     Given "ab" line segment and collection of ordered points with coordinates x and y, choose the point
     which has the maximum distant from the line passes through "ab",
@@ -193,29 +179,29 @@ def get_max_distant_point(x, y, a=None, b=None):
     return x[mx_index], y[mx_index]
 
 
-def get_four_vertices(img_filtered):
-    xx_left, xx_right, yy = get_page_vertical_sides(img_filtered)
+def _four_vertices(img_filtered):
+    xx_left, xx_right, yy = _page_vertical_sides(img_filtered)
 
-    center_x, center_y = get_center(xx_left, xx_right, yy)
+    center_x, center_y = _center(xx_left, xx_right, yy)
     logger.debug('center_x: %s, center_y: %s', center_x, center_y)
 
-    l_result = get_vertices_from_side(xx_left, yy, center_x, is_left_side=True)
+    l_result = _vertices_from_side(xx_left, yy, center_x, is_left_side=True)
     logger.debug('left_side_vertices = %s', l_result)
     if not V.TOP_LEFT in l_result or not V.BOTTOM_LEFT in l_result:
         raise VertexError("Left side vertices:", l_result)
 
-    r_result = get_vertices_from_side(xx_right, yy, center_x, is_left_side=False)
+    r_result = _vertices_from_side(xx_right, yy, center_x, is_left_side=False)
     logger.debug('right_side_vertices = %s', r_result)
     if not V.TOP_RIGHT in r_result or not V.BOTTOM_RIGHT in r_result:
         raise VertexError('Right side vertices:', r_result)
 
-    four_points = merge_vertices(l_result, r_result)
+    four_points = _merge_vertices(l_result, r_result)
     assert len(four_points) == 4
     logger.debug("four points = %s", four_points)
     return four_points
 
 
-def marker_filter(img, blur_param=(14, 1), median_param=3):
+def _marker_filter(img, blur_param=(14, 1), median_param=3):
     blurred = img
     blurred = cv2.blur(img, blur_param)
     blur = cv2.medianBlur(blurred, median_param, 0)
@@ -223,8 +209,7 @@ def marker_filter(img, blur_param=(14, 1), median_param=3):
     return th
 
 
-
-def merge_vertices(left_vertices, right_vertices):
+def _merge_vertices(left_vertices, right_vertices):
     """
     Merge vertices results obtained from the left side and the right one, duplicate vertices could happen,
     then choose the better accurate ones
@@ -242,7 +227,7 @@ def merge_vertices(left_vertices, right_vertices):
     return result
 
 
-def transform(img, vertices, shape, show=False):
+def _transform(img, vertices, shape, show=False):
     """
      Wrap the region of answer sheet inside "img" into new image image with fized size defined in "shape"
 
@@ -268,7 +253,7 @@ def transform(img, vertices, shape, show=False):
     return dst
 
 
-def add_shift(vertices, x_shift):
+def _add_shift(vertices, x_shift):
     """
     Experimental, shift answer sheet left vertices to include vertical full black strip,
     might help in next step of locating markers,
@@ -286,14 +271,14 @@ def add_shift(vertices, x_shift):
     return result
 
 
-def slide_marker(img, y_step, windows_y):
+def _slide_marker(img, y_step, windows_y):
     # TODO to be deleted later
     height, width = img.shape
     for y in range(0, height, y_step):
         yield (y, img[y:y + windows_y, 0:width])
 
 
-def filter_marker_y_padding(markers_y_indexes, padding_y_top, padding_y_bottom):
+def _filter_marker_y_padding(markers_y_indexes, padding_y_top, padding_y_bottom):
     """
     Filter the markers indexes for padding space in the top and bottom of answer sheet
 
@@ -306,20 +291,20 @@ def filter_marker_y_padding(markers_y_indexes, padding_y_top, padding_y_bottom):
                              & (markers_y_indexes < padding_y_bottom)]
 
 
-def get_markers(a, avg_smoothed, spacing=3):
+def _get_markers(a, avg_smoothed, spacing=3):
     id_down, id_up = get_crossing_downs_ups(a, avg_smoothed, spacing)
     logger.debug("id_up befor filtering = %s ", len(id_up))
 
-    id_up = filter_marker_y_padding(id_up, conf.marker_y_padding_top,
-                                    conf.marker_y_padding_down)
+    id_up = _filter_marker_y_padding(id_up, conf.marker_y_padding_top,
+                                     conf.marker_y_padding_down)
     logger.debug("id_up after filtering = %s ", len(id_up))
 
     logger.debug("id_up = %s", len(id_up))
 
     logger.debug("id_down befor filtering = %s ", len(id_down))
 
-    id_down = filter_marker_y_padding(id_down, conf.marker_y_padding_top,
-                                      conf.marker_y_padding_down)
+    id_down = _filter_marker_y_padding(id_down, conf.marker_y_padding_top,
+                                       conf.marker_y_padding_down)
     logger.debug("id_down after filtering = %s ", len(id_down))
     logger.debug("id_do = %s ", len(id_down))
 
@@ -341,17 +326,17 @@ def get_markers(a, avg_smoothed, spacing=3):
     # return np.stack((id_down, id_up), axis=1)
 
 
-def draw_vertices(img, vertices):
+def __draw_vertices(img, vertices):
     for k, v in vertices.items():
         cv2.circle(img, v, 4, [255, 255, 255], 4)
 
 
-def update_markers_with_x(markers_list):
+def _update_markers_with_x(markers_list):
     section_markers = [conf.sec_marker.translate(0, m.y0) for m in markers_list[:]]
     # marker_top = section_marker_top.crop(sheet)
     for sec_marker, marker in zip(section_markers, markers_list):
         marker_roi = sec_marker.crop(sheet)
-        x0, x1 = get_marker_x0_x1(marker_roi)
+        x0, x1 = _get_marker_x0_x1(marker_roi)
         marker.set_x0_x1(x0, x1)
     result = {}
     if len(markers_list == 63):
@@ -361,8 +346,8 @@ def update_markers_with_x(markers_list):
     return result
 
 
-def get_marker_x0_x1(marker_roi):
-    marker_roi = marker_filter(marker_roi, blur_param=(1, 7), median_param=1)
+def _get_marker_x0_x1(marker_roi):
+    marker_roi = _marker_filter(marker_roi, blur_param=(1, 7), median_param=1)
 
     sum_marker = marker_roi.sum(0)
     sum_marker_avg = np.average(sum_marker)
@@ -382,7 +367,7 @@ def get_marker_x0_x1(marker_roi):
         return id_down[0], id_up[1]
 
 
-def draw_markers_lines(sheet, markers):
+def __draw_markers_lines(sheet, markers):
     height, width = sheet.shape
     for m in markers.values():
         y0, y1, shift_per_x = m.y0_y1_shift()
@@ -394,7 +379,7 @@ def draw_markers_lines(sheet, markers):
         cv2.line(sheet, (x1, y0), (x1, y1 + shift), (255, 255, 255), 1)
 
 
-def calibre_vertical(center_x=None, roi=None):
+def _calibre_vertical(center_x=None, roi=None):
     height, width = roi.shape
     logger.debug('marker_calibre shape = %s', roi.shape)
     # blur = cv2.medianBlur(roi, 3, 0)
@@ -415,9 +400,9 @@ def calibre_vertical(center_x=None, roi=None):
     # plt.show()
 
 
-def calibrate_with_marker(marker, sheet,
-                          marker_shift=conf.sec_marker_shift,
-                          marker_calibre=conf.marker_calibre_range):
+def _calibrate_with_marker(marker, sheet,
+                           marker_shift=conf.sec_marker_shift,
+                           marker_calibre=conf.marker_calibre_range):
     sec = Section.of(marker, marker_shift)
     img = sec.crop(sheet)
     # img = cv2.blur(img, (1,1))
@@ -440,7 +425,7 @@ def calibrate_with_marker(marker, sheet,
     # ret3, roi_calibre = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     marker_new = marker.translate(-sec.x1, -sec.y1)
-    diff = calibre_vertical(marker_new.y1, roi_calibre)
+    diff = _calibre_vertical(marker_new.y1, roi_calibre)
     m_c_center = (marker_calibre[0] + marker_calibre[1]) / 2.0
     shift_per_x = diff / m_c_center
     marker_new.set_shift_y(shift_per_x)
@@ -456,7 +441,7 @@ def calibrate_with_marker(marker, sheet,
     for point in zip(x, y):
         cv2.circle(img, point, 3, [255, 255, 255], 3)
 
-    draw_markers_lines(img, {marker_new.id: marker_new})
+    __draw_markers_lines(img, {marker_new.id: marker_new})
     # plt.subplot(311), plt.imshow(img, 'gray'), plt.title('marker: ' + str(marker.id))
     # plt.subplot(312), plt.plot(x_sum, 'r'), plt.title('x_sum')
     # plt.subplot(313), plt.imshow(roi_calibre, 'gray'), plt.title('calibre')
@@ -479,12 +464,12 @@ if __name__ == '__main__':
     # plt.imshow(img_otsu, 'gray'), plt.title('otsu')
     # plt.show()
 
-    vertices = get_four_vertices(img_otsu)
+    vertices = _four_vertices(img_otsu)
     # v_shifted = add_shift(vertices, conf.marker_l_shift)
     # v_shifted =  vertices
     # draw_vertices(img, vertices)
 
-    sheet = transform(img, vertices, conf.rshape, False)
+    sheet = _transform(img, vertices, conf.rshape, False)
     vis_sheet = sheet.copy()
 
     # plt.subplot(111), plt.imshow(sheet, 'gray'), plt.title('sheet')
@@ -503,9 +488,9 @@ if __name__ == '__main__':
 
     sheet_one = conf.sec_one.crop(sheet)
     sheet_marker = conf.sec_marker_column.crop(sheet)
-    sheet_marker = marker_filter(sheet_marker,
-                                 blur_param=(14, 1),
-                                 median_param=conf.marker_filter_median_blur)
+    sheet_marker = _marker_filter(sheet_marker,
+                                  blur_param=(14, 1),
+                                  median_param=conf.marker_filter_median_blur)
 
     y_sum = sheet_marker.sum(1)
     # y_sum = sheet_marker.sum(1) / conf.marker_r_shift
@@ -517,7 +502,7 @@ if __name__ == '__main__':
     logger.debug("y_sum shape = %s ", y_sum.shape)
     logger.debug("avg_s shape = %s ", avg_smoothed.shape)
 
-    markers_list = get_markers(y_sum, avg_smoothed, conf.marker_threshold_spacing)
+    markers_list = _get_markers(y_sum, avg_smoothed, conf.marker_threshold_spacing)
     if len(markers_list) != 63:
         plt.subplot(313), plt.plot(y_sum, 'r', avg_smoothed, 'b'), plt.title(
             "error ")  # very important to debug splitting points
@@ -528,13 +513,13 @@ if __name__ == '__main__':
 
     # section_marker_top = conf.top_marker.translate(0, markers[0].y0)
 
-    markers = update_markers_with_x(markers_list)
+    markers = _update_markers_with_x(markers_list)
 
     last_shift = 0
 
     for m in markers.values():
         if m.id in [15, 29, 33, 37, 41, 47, 49]:
-            last_shift = calibrate_with_marker(m, sheet)
+            last_shift = _calibrate_with_marker(m, sheet)
         m.set_shift_y(last_shift)
 
     # for i in [15, 29, 33, 37, 41, 47, 49]:
@@ -542,7 +527,7 @@ if __name__ == '__main__':
     #     markers[i].set_shift_y(diff)
     #     logger.debug('marker %s shift = %s', i, markers[i].shift_y)
 
-    draw_markers_lines(vis_sheet, markers)
+    __draw_markers_lines(vis_sheet, markers)
     # section_markers = [conf.sec_marker.translate(0, m.y0) for m in markers[:]]
     # # marker_top = section_marker_top.crop(sheet)
     # for sec_marker, marker in zip(section_markers, markers):
