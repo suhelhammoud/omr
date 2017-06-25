@@ -1,4 +1,96 @@
+import logging
+
 import numpy as np
+import cv2
+from matplotlib import pyplot as plt
+
+from omr_configuration import Section
+from omr_exceptions import AnswerXBorderError, AnswerCalibrateError
+from omr_utils import get_crossing_downs_ups
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+
+def get_answers(sheet, markers):
+    markers = [m for m in markers if m.id > 12]
+    for m in markers:
+        get_answer(sheet, m.id - 12, m.x2 + 2, m.center_y_int(), debug=True)
+    pass
+
+
+def _calibre_vertical(roi=None, avg=160, debug=False):
+    height, width = roi.shape
+    y_sum = roi.sum(1) / width
+
+    downs, ups = get_crossing_downs_ups(y_sum, avg, spacing=0)
+
+    if debug:
+        plt.subplot(311), plt.imshow(roi, 'gray'), plt.title('roi')
+        plt.subplot(312), plt.plot(y_sum, 'r'), plt.title('y_sum')
+        # plt.axvline(x=downs[0])
+        # plt.axvline(x=ups[0])
+        plt.show()
+
+    if len(downs) != 1 or len(ups) != 1:
+        logger.error('calibrate vertical shift error downs= %s, ups= %s', downs, ups)
+        raise AnswerCalibrateError('shift error downs= %s, ups= %s' % (downs, ups))
+
+    return (downs[0] + ups[0]) / 2.0
+
+
+def get_answer(sheet, num, x1, y, debug=False):
+    y1 = y - 25
+    y2 = y + 25
+    x2 = x1 + 240
+    section = Section(x1, y1, x2, y2)
+    answer_img = section.crop(sheet)
+    height, width = answer_img.shape
+
+    sum_x = np.sum(answer_img, axis=0) / answer_img.shape[0]
+    downs, ups = get_crossing_downs_ups(sum_x, 245)
+    awidth = ups[0] - downs[0]
+    if len(downs) < 1 and len(ups) < 1:
+        logger.debug("len(downs):%s, len(ups): %s", len(downs), len(ups))
+        raise AnswerXBorderError(" len(downs):%s, len(ups): %s" % (len(downs), len(ups)))
+
+    xc1 = downs[0] + 4
+    xd = 4
+    yd = 5
+
+    yc1 = yd + int(_calibre_vertical(answer_img[yd:-yd, xc1: xc1 + xd],
+                                     avg=100,
+                                     debug=True))
+
+    xc2 = ups[0] - 4 - xd
+    yc2 = yd + int(_calibre_vertical(answer_img[yd:-yd, xc2: xc2 + xd],
+                                     avg=100,
+                                     debug=True))
+
+    if debug:
+        calibre = [.263, .811]
+        ratio = [.193, .372, .55, .729, .908]
+        # ratio = [0.184,0.369,0.548,0.733,0.908]
+
+        color = (0, 0, 0) if num % 2 == 0 else (255, 255, 255)
+
+        cv2.line(answer_img, (xc1, yc1), (xc2, yc2), color, 1)
+        plt.subplot(211), plt.imshow(answer_img, 'gray'), plt.title(str(num))
+
+        plt.subplot(212), plt.plot(sum_x, 'r'), plt.title(str(num))
+
+        for x in [int(round(r * awidth)) + downs[0] for r in ratio]:
+            cv2.line(answer_img, (x, 0), (x, height), color, 1)
+            # plt.axvline(x = int(round(x * awidth)))
+        for x in downs:
+            plt.axvline(x=x)
+        for x in ups:
+            plt.axvline(x=x)
+
+        plt.show()
+    # y_calibre_2 = y1 + _calibre_vertical(answer_img[:, -x_shift - x_delta: -x_shift], debug=True)
+
+    pass
 
 
 def answer_blob_coverage(img, x, y,
@@ -31,6 +123,8 @@ def answer_blob_coverage(img, x, y,
 
 class Answer:
     X = [.193, .372, .55, .729, .908]
+
+    # ratio = [0.184, 0.369, 0.548, 0.733, 0.908]
 
     def __init__(self, num, x1, x2, y1, y2, height=20):
         self.num = num
