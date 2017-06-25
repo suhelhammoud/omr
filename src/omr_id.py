@@ -87,9 +87,9 @@ def process_id(img, debug=False):
 
     # slicing sum_y : [y_starts[0]: y_ends[0]]
     m_avg = np.average(sum_y[50: 285]) - 10
-    logger.debug("moving avg: %s", m_avg)
+    # logger.debug("id avg: %s", m_avg)
     y_downs, y_ups = get_crossing_downs_ups(sum_y, m_avg, spacing=0)
-    logger.debug("y_donws: %s, y_ups: %s", len(y_downs), len(y_ups))
+    # logger.debug("y_donws: %s, y_ups: %s", len(y_downs), len(y_ups))
 
     y_splits = filter_y_splits(y_downs, y_ups)
 

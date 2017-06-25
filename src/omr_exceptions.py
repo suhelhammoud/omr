@@ -25,3 +25,27 @@ class SheetTypeError(Exception):
 
 class SheetNoTypeFoundError(Exception):
     pass
+
+
+class MarkersNumberError(Exception):
+    pass
+
+
+class MarkerXError(Exception):
+    pass
+
+
+class MarkerCalibrateError(Exception):
+    pass
+
+
+class AnswerXBorderError(Exception):
+    pass
+
+
+class AnswerCalibrateError(Exception):
+    pass
+
+
+class AnswerMiddleError(Exception):
+    pass

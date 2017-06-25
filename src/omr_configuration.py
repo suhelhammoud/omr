@@ -11,6 +11,9 @@ class Section:
         self.x2 = x2
         self.y2 = y2
 
+    def top_left(self):
+        return self.x1, self.y1
+
     def crop(self, img):
         return img[self.y1: self.y2, self.x1: self.x2]
 
@@ -25,6 +28,9 @@ class Section:
     def height(self):
         return self.y2 - self.y1
 
+    def width(self):
+        return self.x2 - self.x1
+
     @staticmethod
     def of(section, shift=None):
         x1, y1, x2, y2 = section.coordinates()
@@ -32,7 +38,7 @@ class Section:
             return Section(x1, y1, x2, y2)
         elif len(shift) == 2:  # [dx,dy]
             dx, dy = shift
-            return Section(x1 - dx, y1 - dy, x1 + dx, y2 + dy)
+            return Section(x1 - dx, y1 - dy, x1 + dx, y1 + dy)
         else:  # [dx1, dy1, dx2, dy2]
             return Section(x1 + shift[0], y1 + shift[1], x2 + shift[2], y2 + shift[3])
 
@@ -46,6 +52,9 @@ class OmrConfiguration:
     sec_two = Section(260, 260, 500, 1270)
     y_step = 20
     y_window = 100
+
+    left_margin = 0
+    marker_l_shift = 0
     marker_x0_bound = 0
     marker_x1_bound = 55
     # sec_marker = Section(0, 0, marker_r_shift - marker_l_shift, rshape[1])
@@ -65,21 +74,20 @@ class OmrConfiguration:
     # top_marker = Section(0, -5, 300, 15)
     sec_marker = Section(0, -3, 70, 12)
     sec_marker_shift = [0, -20, 237, 20]
-    marker_calibre_range = (195, 205)
-
-
+    # marker_calibre_range = (195, 205)
+    marker_calibre_range = (215, 219)
 
 
 conf = OmrConfiguration
 
 
 class Marker:
-    def __init__(self, y0, y1, x0=None, x1=None, id=None):
-        assert y1 > y0
-        self.y0 = y0
+    def __init__(self, y1, y2, x1=None, x2=None, id=None):
+        assert y2 > y1
         self.y1 = y1
-        self.x0 = x0
+        self.y2 = y2
         self.x1 = x1
+        self.x2 = x2
         self.id = id
         self.shift_y = 0
 
@@ -95,23 +103,26 @@ class Marker:
 
     def translate(self, dx, dy):
         '''returns new section transformed into new coordinates'''
-        return Marker(self.y0 + dy, self.y1 + dy,
-                       self.x0 + dx, self.x1 + dx, self.id)
+        return Marker(self.y1 + dy, self.y2 + dy,
+                      self.x1 + dx, self.x2 + dx, self.id)
 
     def coordinates(self):
-        return self.x0, self.y0, self.x1, self.y1
+        return self.x1, self.y1, self.x2, self.y2
 
     def center_y(self):
-        return (self.y0 + self.y1) / 2
+        return (self.y1 + self.y2) / 2
+
+    def center_y_int(self):
+        return int(round(self.center_y()))
 
     def height(self):
-        return self.y1 - self.y0
+        return self.y2 - self.y1
 
     def is_in_h_range(self, h_r=conf.marker_height_range):
-        return (self.y1 - self.y0) in h_r
+        return (self.y2 - self.y1) in h_r
 
     def is_lower_than(self, that):
-        return self.x0 > that.x1
+        return self.x1 > that.x1
 
     def is_in_h_space(self, that, space=conf.marker_space_range):
         upper, lower = Marker.upper_lower(self, that)
@@ -120,18 +131,30 @@ class Marker:
                and (lower.y1 - upper.y1) in space
 
     def __repr__(self):
-        return 'Marker (id:{}, y0:{}, y1:{}, x0:{}, x1:{})' \
-            .format(self.id, self.y0, self.y1, self.x0, self.x1)
+        return 'Marker (id: %s, y0: %s, y1:%s, x0:%s, x1:%s), shift_y:%s' % \
+               (self.id, self.y1, self.y2, self.x1, self.x2, self.shift_y)
 
-    def y0_y1_shift(self):
-        return self.y0, self.y1, self.shift_y
+    def y1_y2_shift(self):
+        return self.y1, self.y2, self.shift_y
 
-    def set_x0_x1(self, x0, x1):
-        self.x0 = x0
+    def set_x1_x2(self, x1, x2):
         self.x1 = x1
+        self.x2 = x2
 
-    def x0_x1(self):
-        return self.x0, self.x1
+    def x1_x2(self):
+        return self.x1, self.x2
+
+    def top_left(self):
+        return self.x1, self.y1
+
+    def top_right(self):
+        return self.x2, self.y1
+
+    def bottom_left(self):
+        return self.x1, self.y2
+
+    def bottom_right(self):
+        return self.x2, self.y2
 
     @staticmethod
     def upper_lower(m1, m2):
@@ -141,14 +164,14 @@ class Marker:
             return m2, m1
 
     @staticmethod
-    def can_acept(y0, y1):
-        return y0 > conf.marker_y_padding_top \
-               and y1 < conf.marker_y_padding_down \
-               and y1 - y0 in conf.marker_height_range
+    def can_acept(y1, y2):
+        return y1 > conf.marker_y_padding_top \
+               and y2 < conf.marker_y_padding_down \
+               and y2 - y1 in conf.marker_height_range
 
     def is_valid_marker(marker):
-        if marker.y0 < conf.marker_y_padding_top \
-                or marker.y1 > conf.marker_y_padding_down:
+        if marker.y1 < conf.marker_y_padding_top \
+                or marker.y2 > conf.marker_y_padding_down:
             return False
         if not marker.height() in conf.marker_height_range:
             return False

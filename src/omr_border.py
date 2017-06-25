@@ -148,8 +148,6 @@ def _process_sub_side(xx, yy, center_x, isTopSide=True, isLeftSide=True):
     else:  # cross sides
         # TODO calculate both vertices using the vertex method
         vertex = _max_distant_point(xx, yy)
-        logger.debug("vertex top = %s , isLeftSide = %s", vertex, isLeftSide)
-
         vertex2 = (xx[v2_index], yy[v2_index])
         return (vertex, vertex2) if isLeftSide else (vertex2, vertex)
 
@@ -181,19 +179,17 @@ def _max_distant_point(x, y, a=None, b=None):
 
 def _four_vertices(img_filtered):
     xx_left, xx_right, yy = _page_vertical_sides(img_filtered)
-
     center_x, center_y = _center(xx_left, xx_right, yy)
-    logger.debug('center_x: %s, center_y: %s', center_x, center_y)
 
     l_result = _vertices_from_side(xx_left, yy, center_x, is_left_side=True)
-    logger.debug('left_side_vertices = %s', l_result)
-    if not V.TOP_LEFT in l_result or not V.BOTTOM_LEFT in l_result:
-        raise VertexError("Left side vertices:", l_result)
+
+    if V.TOP_LEFT not in l_result or V.BOTTOM_LEFT not in l_result:
+        raise VertexError("Left side: couldn't find TOP_LEFT, or BOTTOM_LEFT. l_result = %s" % l_result)
 
     r_result = _vertices_from_side(xx_right, yy, center_x, is_left_side=False)
-    logger.debug('right_side_vertices = %s', r_result)
+
     if not V.TOP_RIGHT in r_result or not V.BOTTOM_RIGHT in r_result:
-        raise VertexError('Right side vertices:', r_result)
+        raise VertexError("Right side: couldn't find TOP_RIGHT, or BOTTOM_RIGHT. r_result = %s" % r_result)
 
     four_points = _merge_vertices(l_result, r_result)
     assert len(four_points) == 4
@@ -326,18 +322,18 @@ def _get_markers(a, avg_smoothed, spacing=3):
     # return np.stack((id_down, id_up), axis=1)
 
 
-def __draw_vertices(img, vertices):
+def _draw_vertices(img, vertices):
     for k, v in vertices.items():
         cv2.circle(img, v, 4, [255, 255, 255], 4)
 
 
-def _update_markers_with_x(markers_list):
+def _update_markers_with_x(markers_list, sheet=None):
     section_markers = [conf.sec_marker.translate(0, m.y0) for m in markers_list[:]]
     # marker_top = section_marker_top.crop(sheet)
     for sec_marker, marker in zip(section_markers, markers_list):
         marker_roi = sec_marker.crop(sheet)
         x0, x1 = _get_marker_x0_x1(marker_roi)
-        marker.set_x0_x1(x0, x1)
+        marker.set_x1_x2(x0, x1)
     result = {}
     if len(markers_list == 63):
         for i in range(len(markers_list)):
@@ -367,11 +363,11 @@ def _get_marker_x0_x1(marker_roi):
         return id_down[0], id_up[1]
 
 
-def __draw_markers_lines(sheet, markers):
+def _draw_markers_lines(sheet, markers):
     height, width = sheet.shape
     for m in markers.values():
-        y0, y1, shift_per_x = m.y0_y1_shift()
-        x0, x1 = m.x0_x1()
+        y0, y1, shift_per_x = m.y1_y2_shift()
+        x0, x1 = m.x1_x2()
         shift = int(shift_per_x * width)
         cv2.line(sheet, (0, y0), (width, y0 + shift), (0, 255, 255), 1)
         cv2.line(sheet, (0, y1), (width, y1 + shift), (255, 255, 255), 1)
@@ -402,7 +398,8 @@ def _calibre_vertical(center_x=None, roi=None):
 
 def _calibrate_with_marker(marker, sheet,
                            marker_shift=conf.sec_marker_shift,
-                           marker_calibre=conf.marker_calibre_range):
+                           marker_calibre=conf.marker_calibre_range,
+                           debug=False):
     sec = Section.of(marker, marker_shift)
     img = sec.crop(sheet)
     # img = cv2.blur(img, (1,1))
@@ -438,20 +435,43 @@ def _calibrate_with_marker(marker, sheet,
     y = [int(marker_new.y1 + shift_per_x * i) for i in x]
     logger.debug("x = %s, y = %s", x, y)
 
-    for point in zip(x, y):
-        cv2.circle(img, point, 3, [255, 255, 255], 3)
+    if debug:
 
-    __draw_markers_lines(img, {marker_new.id: marker_new})
-    # plt.subplot(311), plt.imshow(img, 'gray'), plt.title('marker: ' + str(marker.id))
-    # plt.subplot(312), plt.plot(x_sum, 'r'), plt.title('x_sum')
-    # plt.subplot(313), plt.imshow(roi_calibre, 'gray'), plt.title('calibre')
-    #
-    # plt.show()
+        # for point in zip(x, y):
+        #     cv2.circle(img, point, 3, [255, 255, 255], 3)
+        #
+        _draw_markers_lines(img, {marker_new.id: marker_new})
+        plt.subplot(311), plt.imshow(img, 'gray'), plt.title('marker: ' + str(marker.id))
+        plt.subplot(312), plt.plot(x_sum, 'r'), plt.title('x_sum')
+        plt.subplot(313), plt.imshow(roi_calibre, 'gray'), plt.title('calibre')
+
+        plt.show()
     return shift_per_x
 
 
-if __name__ == '__main__':
+def get_sheet(img, debug=False):
+    height, width = img.shape
+    # logger.debug("height %s, width %s", height, width)
 
+    img_otsu = otsu_filter(img, blur_kernel=21)
+
+    vertices = _four_vertices(img_otsu)
+
+    sheet = _transform(img, vertices, conf.rshape, False)
+
+
+    if debug:
+        img = img.copy()
+        plt.subplot(131), plt.imshow(img, 'gray'), plt.title('img')
+        plt.subplot(132), plt.imshow(img_otsu, 'gray'), plt.title('img_otsu')
+        plt.subplot(133), plt.imshow(sheet, 'gray'), plt.title('sheet')
+        _draw_vertices(img, vertices)
+        plt.show()
+
+    return sheet
+
+
+def process_border():
     # file_path = '../data/colored/6.jpg'
     file_path = '../data/in2/01.jpg'
     img = cv2.imread(file_path, 0)
@@ -513,7 +533,7 @@ if __name__ == '__main__':
 
     # section_marker_top = conf.top_marker.translate(0, markers[0].y0)
 
-    markers = _update_markers_with_x(markers_list)
+    markers = _update_markers_with_x(markers_list, sheet)
 
     last_shift = 0
 
@@ -527,7 +547,7 @@ if __name__ == '__main__':
     #     markers[i].set_shift_y(diff)
     #     logger.debug('marker %s shift = %s', i, markers[i].shift_y)
 
-    __draw_markers_lines(vis_sheet, markers)
+    _draw_markers_lines(vis_sheet, markers)
     # section_markers = [conf.sec_marker.translate(0, m.y0) for m in markers[:]]
     # # marker_top = section_marker_top.crop(sheet)
     # for sec_marker, marker in zip(section_markers, markers):

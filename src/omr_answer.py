@@ -5,7 +5,7 @@ import cv2
 from matplotlib import pyplot as plt
 
 from omr_configuration import Section
-from omr_exceptions import AnswerXBorderError, AnswerCalibrateError
+from omr_exceptions import AnswerXBorderError, AnswerCalibrateError, AnswerMiddleError
 from omr_utils import get_crossing_downs_ups
 
 logging.basicConfig(level=logging.DEBUG)
@@ -25,7 +25,7 @@ def _calibre_vertical(roi=None, avg=160, debug=False):
 
     downs, ups = get_crossing_downs_ups(y_sum, avg, spacing=0)
 
-    if debug:
+    if debug or len(downs) + len(ups) > 2:
         plt.subplot(311), plt.imshow(roi, 'gray'), plt.title('roi')
         plt.subplot(312), plt.plot(y_sum, 'r'), plt.title('y_sum')
         # plt.axvline(x=downs[0])
@@ -39,9 +39,13 @@ def _calibre_vertical(roi=None, avg=160, debug=False):
     return (downs[0] + ups[0]) / 2.0
 
 
+def get_shift_y_per_x(img, x1, x2):
+    pass
+
+
 def get_answer(sheet, num, x1, y, debug=False):
-    y1 = y - 25
-    y2 = y + 25
+    y1 = y - 20
+    y2 = y + 20
     x2 = x1 + 240
     section = Section(x1, y1, x2, y2)
     answer_img = section.crop(sheet)
@@ -49,23 +53,32 @@ def get_answer(sheet, num, x1, y, debug=False):
 
     sum_x = np.sum(answer_img, axis=0) / answer_img.shape[0]
     downs, ups = get_crossing_downs_ups(sum_x, 245)
-    awidth = ups[0] - downs[0]
+    answer_width = ups[0] - downs[0]
     if len(downs) < 1 and len(ups) < 1:
         logger.debug("len(downs):%s, len(ups): %s", len(downs), len(ups))
         raise AnswerXBorderError(" len(downs):%s, len(ups): %s" % (len(downs), len(ups)))
 
-    xc1 = downs[0] + 4
-    xd = 4
+    calibre = [.263, .811]
+    xd = 2
     yd = 5
 
-    yc1 = yd + int(_calibre_vertical(answer_img[yd:-yd, xc1: xc1 + xd],
-                                     avg=100,
-                                     debug=True))
+    x_answer = [int(round(answer_width * r)) + downs[0] for r in calibre]
+    y_answer = [int(round(_calibre_vertical(answer_img[:, x - xd:x + xd], 150, debug=False)))
+                for x in x_answer]
+    y_shift_per_x = (y_answer[1] - y_answer[0]) / (x_answer[1] - x_answer[0])
 
-    xc2 = ups[0] - 4 - xd
-    yc2 = yd + int(_calibre_vertical(answer_img[yd:-yd, xc2: xc2 + xd],
-                                     avg=100,
-                                     debug=True))
+    # y_answer = [y1 + y for y in y_answer]
+
+    # xc1 = downs[0] + 4
+    #
+    # yc1 = yd + int(_calibre_vertical(answer_img[yd:-yd, xc1: xc1 + xd],
+    #                                  avg=100,
+    #                                  debug=True))
+    #
+    # xc2 = ups[0] - 4 - xd
+    # yc2 = yd + int(_calibre_vertical(answer_img[yd:-yd, xc2: xc2 + xd],
+    #                                  avg=100,
+    #                                  debug=True))
 
     if debug:
         calibre = [.263, .811]
@@ -74,12 +87,12 @@ def get_answer(sheet, num, x1, y, debug=False):
 
         color = (0, 0, 0) if num % 2 == 0 else (255, 255, 255)
 
-        cv2.line(answer_img, (xc1, yc1), (xc2, yc2), color, 1)
+        cv2.line(answer_img, (x_answer[0], y_answer[0]), (x_answer[1], y_answer[1]), color, 1)
         plt.subplot(211), plt.imshow(answer_img, 'gray'), plt.title(str(num))
 
         plt.subplot(212), plt.plot(sum_x, 'r'), plt.title(str(num))
 
-        for x in [int(round(r * awidth)) + downs[0] for r in ratio]:
+        for x in [int(round(r * answer_width)) + downs[0] for r in ratio]:
             cv2.line(answer_img, (x, 0), (x, height), color, 1)
             # plt.axvline(x = int(round(x * awidth)))
         for x in downs:
@@ -90,7 +103,6 @@ def get_answer(sheet, num, x1, y, debug=False):
         plt.show()
     # y_calibre_2 = y1 + _calibre_vertical(answer_img[:, -x_shift - x_delta: -x_shift], debug=True)
 
-    pass
 
 
 def answer_blob_coverage(img, x, y,
@@ -128,10 +140,10 @@ class Answer:
 
     def __init__(self, num, x1, x2, y1, y2, height=20):
         self.num = num
-        self.x1 = x1
-        self.x2 = x2
-        self.y1 = y1
-        self.y2 = y2
+        self.x1 = int(round(x1))
+        self.x2 = int(round(x2))
+        self.y1 = int(round(y1))
+        self.y2 = int(round(y2))
 
         self.width = self.x2 - self.x1
         self.height = height
@@ -154,3 +166,28 @@ class Answer:
     def mark(self, img, threshold=None):
         return [answer_blob_coverage(img, xi, yi, (4, 3), threshold=threshold)
                 for xi, yi in self.choices()]
+
+    @staticmethod
+    def middle_answer(a1, a2):
+        num = (a2.num + a1.num) / 2
+        if num % 2 != 0:
+            logger.error('cannot find middle ans1: %s, ans2: %s', a1.num, a2.num)
+            raise AnswerMiddleError('cannot find middle ans1: %s, ans2: %s' % (a1.num, a2.num))
+
+        return Answer(num,
+                      (a1.x1 + a2.x1) / 2,
+                      (a1.x2 + a2.x2) / 2,
+                      (a1.y1 + a2.y1) / 2,
+                      (a1.y2 + a2.y2) / 2,
+                      a1.height)
+
+    @staticmethod
+    def next_answer(a1, a2):
+        dnum = a2.num - a1.num
+        r = (1.0 + dnum) / dnum
+        return Answer(a2.num + 1,
+                      (a2.x1 - a1.x1) * r,
+                      (a2.x2 - a1.x2) * r,
+                      (a2.y1 - a1.y1) * r,
+                      (a2.y2 - a1.y2) * r,
+                      a2.height)

@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+from matplotlib import pyplot as plt
 from numpy.linalg import norm
 
 
@@ -27,13 +28,14 @@ def get_crossing_downs_ups(values, avg, spacing=0):
         :id_down: indexes of crossing downward points,
         :id_up: indexes of crossing upward points,
     """
+    # TODO try to remove spacing for speed optimization
     a0 = values[:-1]
     a1 = values[1:]
     avg_plus = avg + spacing
     avg_minus = avg - spacing
 
     id_down = np.where((a0 > avg_plus)
-                       & (a1 < avg_minus))[0]
+                       & (a1 < avg_minus))[0] + 1  # TODO adjust or delete the one here
 
     id_up = np.where((a0 < avg_minus)
                      & (a1 > avg_plus))[0]
@@ -49,8 +51,11 @@ def get_crossing_ups(a, avg, spacing=0):
     return id_up
 
 
-def otsu_filter(img, blur_kernel=1):
-    blur = cv2.medianBlur(img, blur_kernel, 0)  # TODO adjust the kernel
+def otsu_filter(img, blur_kernel=None):
+    blur = cv2.medianBlur(img, blur_kernel, 0) if blur_kernel else img
+    # if blur_kernel is not None:
+    #     blur = cv2.medianBlur(img, blur_kernel, 0)  # TODO adjust the kernel
+
     _, th3 = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return th3
 
@@ -108,3 +113,15 @@ def smooth(x, window_len=150, window='flat'):
     y = np.convolve(w / w.sum(), s, mode='valid')
     # return y
     return y[int(window_len / 2 - 1):-int(window_len / 2) - 1]
+
+
+def add_left_margin(img, margin_width, init_value=0):
+    margin = np.zeros((img.shape[0], margin_width), np.uint8) + init_value
+    return np.concatenate((margin, img), axis=1)
+
+
+if __name__ == '__main__':
+    img = cv2.imread('../data/in/01.jpg', 0)
+
+    plt.imshow(add_left_margin(img, 2000, 111), 'gray')
+    plt.show()
