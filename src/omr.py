@@ -2,7 +2,7 @@ import omr_border as brd
 from omr_border import *
 from omr_border import _get_markers, _marker_filter, _update_markers_with_x, _draw_markers_lines
 from omr_markers import process_marker_column, adjust_markers_y_shift, draw_h_lines_on_markers
-from omr_answer import get_answers
+from omr_answer import get_answers, Answer
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 if __name__ == '__main__':
     print('starting processing')
 
-    file_path = '../data/in2/05.jpg'
+    file_path = '../data/in2/01.jpg'
     img = cv2.imread(file_path, 0)
     # plt.imshow(img, 'gray')
     # plt.show()
@@ -31,15 +31,24 @@ if __name__ == '__main__':
     sheet_otsu = otsu_filter(sheet, blur_kernel=None)
     markers = process_marker_column(sheet_otsu, conf.sec_marker_column, debug=False)
 
+
     draw_h_lines_on_markers(markers, vis_sheet)
-
-    get_answers(sheet_otsu, markers)
-
-    adjust_markers_y_shift(markers, sheet_otsu, conf.marker_calibre_range, debug=False)
 
     vis_sheet2 = sheet.copy()
 
-    draw_h_lines_on_markers(markers, vis_sheet2)
+    answers = get_answers(sheet_otsu, markers)
+
+    answers[1] = Answer.get_following(answers[4], answers[2])
+    answers[50] = Answer.get_following(answers[47], answers[49])
+
+    for num, answer in answers.items():
+        logger.info('answer no: %s, data: %s', num, answer)
+        answer.draw_lines(vis_sheet2)
+
+    # adjust_markers_y_shift(markers, sheet_otsu, conf.marker_calibre_range, debug=False)
+
+
+    # draw_h_lines_on_markers(markers, vis_sheet2)
 
     plt.subplot(121), plt.imshow(vis_sheet, 'gray'), plt.title('no y shift')
     plt.subplot(122), plt.imshow(vis_sheet2, 'gray'), plt.title('with y shift')

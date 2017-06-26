@@ -219,7 +219,7 @@ def process_marker_column(img, sec_marker_column, debug=False):
     # y_avg = np.average(y_sum)
 
     # TODO try use use fixed avg rather than smooth if possible
-    # avg_smoothed = smooth(y_sum, window_len=conf.marker_smooth_window, window='flat')
+    avg_smoothed = smooth(y_sum, window_len=conf.marker_smooth_window, window='flat')
     avg_fixed = np.average(y_sum)
 
     markers_list = _get_markers(y_sum, avg_fixed, spacing=0)
