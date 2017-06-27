@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 if __name__ == '__main__':
     print('starting processing')
 
-    file_path = '../data/in2/01.jpg'
+    file_path = '../data/in2/05.jpg'
     img = cv2.imread(file_path, 0)
     # plt.imshow(img, 'gray')
     # plt.show()
@@ -31,15 +31,18 @@ if __name__ == '__main__':
     sheet_otsu = otsu_filter(sheet, blur_kernel=None)
     markers = process_marker_column(sheet_otsu, conf.sec_marker_column, debug=False)
 
-
     draw_h_lines_on_markers(markers, vis_sheet)
 
     vis_sheet2 = sheet.copy()
 
-    answers = get_answers(sheet_otsu, markers)
+    m_50 = {(m.id - 12): (m.x2 + 2, m.center_y_int())
+            for m in markers if m.id > 12}
 
-    answers[1] = Answer.get_following(answers[4], answers[2])
-    answers[50] = Answer.get_following(answers[47], answers[49])
+    # m_100 =
+    answers = get_answers(sheet_otsu, m_50)
+
+    answers[1] = Answer.next(answers[5], answers[2])
+    answers[50] = Answer.next(answers[40], answers[49])
 
     for num, answer in answers.items():
         logger.info('answer no: %s, data: %s', num, answer)

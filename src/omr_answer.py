@@ -2,7 +2,7 @@ import logging
 
 import numpy as np
 import cv2
-
+from math import ceil
 from matplotlib import pyplot as plt
 from math import copysign
 
@@ -14,11 +14,14 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def get_answers(sheet, markers):
+def get_answers(sheet, m_dict):
     result = {}
-    markers = [m for m in markers if (m.id > 12 and m.id < 61)]
-    for m in markers:
-        answer = get_answer(sheet, m.id - 11, m.x2 + 2, m.center_y_int(), debug=False)
+
+    for num, (x, y) in m_dict.items():
+        if num == 1 or num == 50:
+            continue
+
+        answer = get_answer(sheet, num, x, y + 3, debug=False)
         logger.info("answer = %s", answer)
         # answer.show(sheet)
         result[answer.num] = answer
@@ -50,23 +53,20 @@ def get_shift_y_per_x(img, x1, x2):
     pass
 
 
-def get_answer(sheet, num, x_left, y, debug=False):
-    delta_y = 20
-    delta_x = 240
-    y_up = y - delta_y
-    y_bottom = y + delta_y
+def get_answer(sheet, num, x_left, y_center, debug=False):
+    y_span = 20
+    x_span = 240
+    x_right = x_left + x_span
+    y_up = y_center - y_span
+    y_bottom = y_center + y_span
 
-    x_right = x_left + delta_x
-
-    # section = Section(x_left, y_up, x_right, y_bottom)
-    # img_a = section.crop(sheet)
     img_a = sheet[y_up: y_bottom, x_left:x_right]
-    height_a, width_a = img_a.shape
+    img_a_height, width_a = img_a.shape
 
-    sum_x = np.sum(img_a, axis=0) / height_a
+    sum_x = np.sum(img_a, axis=0) / img_a_height
 
-    # plt.subplot(211),plt.imshow(img_a, 'gray'), plt.title('img_a')
-    # plt.subplot(212),plt.plot(sum_x, 'b'), plt.title('sum_x')
+    # plt.subplot(211), plt.imshow(img_a, 'gray'), plt.title('crop_with' + str(num))
+    # plt.subplot(212), plt.plot(sum_x, 'b'), plt.title('sum_x')
     # plt.show()
 
     downs, ups = get_crossing_downs_ups(sum_x, 245)
@@ -74,37 +74,42 @@ def get_answer(sheet, num, x_left, y, debug=False):
         logger.debug("len(downs):%s, len(ups): %s", len(downs), len(ups))
         raise AnswerXBorderError(" len(downs):%s, len(ups): %s" % (len(downs), len(ups)))
 
-    answer_width = ups[0] - downs[0]
-    x1 = downs[0]
-    x2 = ups[0]
+    a_x1 = downs[0]
+    a_x2 = ups[0]
+    a_width = a_x2 - a_x1
 
     calibre = [.263, .811]
     dx = 2
 
-    x_answer = [int(round(answer_width * r)) + x1 for r in calibre]
-    y_answer = [int(round(_calibre_vertical(img_a[:, x - dx:x + dx], 150, debug=False)))
-                for x in x_answer]
-    y_shift_per_x = (y_answer[1] - y_answer[0]) / (x_answer[1] - x_answer[0])
+    x_calibre = [int(round(a_width * r)) + a_x1 for r in calibre]
+    y_calibre = [int(round(_calibre_vertical(img_a[:, x - dx:x + dx], 150, debug=False)))
+                 for x in x_calibre]
 
-    y1 = int(round(y_answer[0] - (x_answer[0] - x1) * y_shift_per_x))
-    y2 = int(round(y_answer[1] + (x2 - x_answer[1]) * y_shift_per_x))
+    a_shift = (y_calibre[1] - y_calibre[0]) / (x_calibre[1] - x_calibre[0])
+
+    y1 = int(round(y_calibre[0] - (x_calibre[0] - a_x1) * a_shift))
+    y2 = int(round(y_calibre[1] + (a_x2 - x_calibre[1]) * a_shift))
+
+    result = Answer(num, x_left + a_x1, x_left + a_x2, y_up + y1, y_up + y2)
+    # shc = sheet.copy()
+    # result.draw_lines(shc)
+    # result.show(shc, str(result.num))
 
     if debug:
         calibre = [.263, .811]
         ratio = [.193, .372, .55, .729, .908]
+
         # ratio = [0.184,0.369,0.548,0.733,0.908]
 
         color = (0, 0, 0) if num % 2 == 0 else (255, 255, 255)
 
-        cv2.line(img_a, (x1, y1), (x2, y2), color, 1)
-        cv2.line(img_a, (x_answer[0], y_answer[0]), (x_answer[1], y_answer[1]), color, 1)
+        cv2.line(img_a, (a_x1, y1), (a_x2, y2), color, 1)
         plt.subplot(211), plt.imshow(img_a, 'gray'), plt.title(str(num))
-
         plt.subplot(212), plt.plot(sum_x, 'r'), plt.title(str(num))
 
-        for x in [int(round(r * answer_width)) + downs[0] for r in ratio]:
-            cv2.line(img_a, (x, 0), (x, height_a), color, 1)
-            # plt.axvline(x = int(round(x * awidth)))
+        for x in [int(round(r * a_width)) + a_x1 for r in ratio]:
+            cv2.line(img_a, (x, 0), (x, img_a_height), color, 1)
+
         for x in downs:
             plt.axvline(x=x)
         for x in ups:
@@ -114,7 +119,7 @@ def get_answer(sheet, num, x_left, y, debug=False):
         # y_calibre_2 = y1 + _calibre_vertical(answer_img[:, -x_shift - x_delta: -x_shift], debug=True)
 
     logger.debug('num:%s, y1:%s, y2:%s', num, y1, y2)
-    return Answer(num, x_left + x1, x_left + x2, y + y1, y + y2)
+    return result
 
 
 def answer_blob_coverage(img, x, y,
@@ -150,38 +155,39 @@ class Answer:
 
     # ratio = [0.184, 0.369, 0.548, 0.733, 0.908]
 
-    def __init__(self, num, x1, x2, y1, y2, height=20):
+    # TODO check shift results shown between line/crosses through choices
+    def __init__(self, num, x1, x2, y1, y2, span=20):
         self.num = int(round(num))
         self.x1 = int(round(x1))
         self.x2 = int(round(x2))
         self.y1 = int(round(y1))
         self.y2 = int(round(y2))
-        self.height = int(round(height))
+        self.span = int(round(span))
 
-        self.width = self.x2 - self.x1
-        self.y_shift = (self.y2 - self.y1) / self.width
-        self.choice_x = [int(round(xr * self.width)) + self.x1 for xr in Answer.X]
-        self.choice_y = [int(round(x * self.y_shift)) + self.y1 for x in self.choice_x]
+        width = self.x2 - self.x1
+        y_shift = (y2 - y1) / (x2 - x1)
+        self.choice_x = [int(round(xr * width) + x1) for xr in Answer.X]
+        self.choice_y = [int(ceil(x * y_shift) + y1) for x in self.choice_x]
 
     def choices(self):
         return zip(self.choice_x, self.choice_y)
 
     def __str__(self):
         return "Answer {>> num:%s, color=%s, x1=%s, x2=%s, y1=%s, y2=%s }" \
-               % (self.num, self.color(), self.x1, self.x2, self.y1, self.y2)
+               % (self.num, self.color_name(), self.x1, self.x2, self.y1, self.y2)
 
-    def color(self):
+    def color_name(self):
         return ['GRAY', 'WHITE'][self.num % 2]
 
     def crop(self, sheet):
-        return sheet[self.y1 - self.height: self.y1 + self.height, self.x1: self.x2]
-
-    def shift_per_x(self):
-        return (self.y2 - self.y1) / (self.x2 - self.x1)
+        return sheet[self.y1 - self.span: self.y1 + self.span, self.x1: self.x2]
 
     def draw_lines(self, sheet):
-        d = 3
+        d = 4
         color = (0, 0, 0) if self.num % 2 == 0 else (255, 255, 255)
+        cv2.line(sheet, (self.x1, self.y1), (self.x2, self.y2), color, 1)
+        # font = cv2.FONT_HERSHEY_SIMPLEX
+        # cv2.putText(sheet, str(self.num), (self.x1, self.y1), font, 1, (255, 255, 255), 2)
 
         for c in self.choices():
             cv2.line(sheet, (c[0] - d, c[1]), (c[0] + d, c[1]), color, 1)
@@ -198,7 +204,7 @@ class Answer:
                 for xi, yi in self.choices()]
 
     @staticmethod
-    def middle_answer(a1, a2):
+    def middle(a1, a2):
         num = (a2.num + a1.num) / 2
         if num % 2 != 0:
             logger.error('cannot find middle ans1: %s, ans2: %s', a1.num, a2.num)
@@ -212,7 +218,7 @@ class Answer:
                       a1.height)
 
     @staticmethod
-    def get_following(a1, a2):
+    def next(a1, a2):
         """
 
         :param a1:
@@ -226,4 +232,4 @@ class Answer:
                       a2.x2 + (a2.x2 - a1.x2) * r,
                       a2.y1 + (a2.y1 - a1.y1) * r,
                       a2.y2 + (a2.y2 - a1.y2) * r,
-                      a2.height)
+                      a2.span)

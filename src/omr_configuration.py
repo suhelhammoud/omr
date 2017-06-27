@@ -131,7 +131,7 @@ class Marker:
                and (lower.y1 - upper.y1) in space
 
     def __repr__(self):
-        return 'Marker (id: %s, y0: %s, y1:%s, x0:%s, x1:%s), shift_y:%s' % \
+        return 'Marker (id: %s, y1: %s, y2:%s, x1:%s, x2:%s), shift_y:%s' % \
                (self.id, self.y1, self.y2, self.x1, self.x2, self.shift_y)
 
     def y1_y2_shift(self):
