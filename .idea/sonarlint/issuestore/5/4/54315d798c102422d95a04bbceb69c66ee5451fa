@@ -1,0 +1,5 @@
+
+;python:S1253"Remove this commented out code.(þ©Ï€ÿÿÿÿÿ
+;python:S125A"Remove this commented out code.(²óšÜÿÿÿÿÿ
+epython:S100"IRename method "of" to match the regular expression ^[a-z_][a-z0-9_]{2,}$.(íÃïÅüÿÿÿÿ
+`python:S100Z"IRename method "id" to match the regular expression ^[a-z_][a-z0-9_]{2,}$.(˜›àö

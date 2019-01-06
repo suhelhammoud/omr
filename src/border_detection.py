@@ -1,14 +1,13 @@
-import cv2
-# import numpy as np
+import logging
+
 from matplotlib import pyplot as plt
 from numpy.linalg import norm
 
 from Configuration import OmrConfiguration as conf, Marker, Section
-from omr_utils import *
 from OmrExceptions import *
+from omr_utils import *
 from process_id import process_id
 from process_type import process_type
-import logging
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -221,7 +220,6 @@ def marker_filter(img, blur_param=(14, 1), median_param=3):
     blur = cv2.medianBlur(blurred, median_param, 0)
     ret, th = cv2.threshold(blur, 127, 255, cv2.THRESH_BINARY)
     return th
-
 
 
 def merge_vertices(left_vertices, right_vertices):
@@ -492,7 +490,6 @@ if __name__ == '__main__':
     # plt.subplot(122), plt.imshow(sheet, 'gray'), plt.title('Sheet')
     # plt.show()
     # cv2.imwrite('../data/out/sheet.jpg', sheet)
-
 
     sheet_type_img = conf.sec_type.crop(sheet)
     sheet_type = process_type(sheet_type_img, debug=False)
