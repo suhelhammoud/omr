@@ -1,25 +1,25 @@
 
-7python:S125ô"Remove this commented out code.(√∑ê”
-<python:S125˛"Remove this commented out code.(ÄåÊêˇˇˇˇˇ
-bpython:S101"FRename class "V" to match the regular expression ^[A-Z_][a-zA-Z0-9]+$.(¬ô◊É˚ˇˇˇˇ
-7python:S125ô"Remove this commented out code.(Ï¸∆¢
-<python:S125◊"Remove this commented out code.(ÎÜ§Æ˝ˇˇˇˇ
-7python:S125 "Remove this commented out code.(´£ÈÊ
-7python:S125›"Remove this commented out code.(√§á√
-7python:S125–"Remove this commented out code.(êﬁ‚ˇ
-<python:S125•"Remove this commented out code.(Ù¨“ô˚ˇˇˇˇ
-<python:S125é"Remove this commented out code.(ƒÜ„≈˚ˇˇˇˇ
-<python:S125¸"Remove this commented out code.(™πÊ£˚ˇˇˇˇ
-<python:S125Ä"Remove this commented out code.(”£∞Î¯ˇˇˇˇ
-7python:S125é"Remove this commented out code.(°çœ√
-7python:S125ä"Remove this commented out code.(≈õ©∑
-<python:S125‘"Remove this commented out code.(≤™≈Õˇˇˇˇˇ
-<python:S125µ"Remove this commented out code.(„µ‚·˘ˇˇˇˇ
-<python:S125Ë"Remove this commented out code.(Æí∞ñ˙ˇˇˇˇ
-spython:S117Ü"VRename this parameter "isLeftSide" to match the regular expression ^[_a-z][a-z0-9_]*$.(Óïûê˙ˇˇˇˇ
 7python:S125·"Remove this commented out code.(€∆Ëì
+7python:S125 "Remove this commented out code.(´£ÈÊ
+<python:S125›"Remove this commented out code.(êŸñ®˛ˇˇˇˇ
+7python:S125ä"Remove this commented out code.(≈õ©∑
+<python:S125é"Remove this commented out code.(ƒÜ„≈˚ˇˇˇˇ
+<python:S125‘"Remove this commented out code.(≤™≈Õˇˇˇˇˇ
 7python:S125ü"Remove this commented out code.(Ò…Œß
 <python:S125¶"Remove this commented out code.(Ó™–·˛ˇˇˇˇ
-rpython:S117Ü"URename this parameter "isTopSide" to match the regular expression ^[_a-z][a-z0-9_]*$.(Óïûê˙ˇˇˇˇ
+<python:S125◊"Remove this commented out code.(ÎÜ§Æ˝ˇˇˇˇ
+spython:S117Ü"VRename this parameter "isLeftSide" to match the regular expression ^[_a-z][a-z0-9_]*$.(Óïûê˙ˇˇˇˇ
+bpython:S101"FRename class "V" to match the regular expression ^[A-Z_][a-zA-Z0-9]+$.(¬ô◊É˚ˇˇˇˇ
+7python:S125é"Remove this commented out code.(°çœ√
+7python:S125ô"Remove this commented out code.(√∑ê”
 <python:S125±"Remove this commented out code.(ùÉ«ﬁ˘ˇˇˇˇ
-<python:S125›"Remove this commented out code.(êŸñ®˛ˇˇˇˇ
+<python:S125•"Remove this commented out code.(Ù¨“ô˚ˇˇˇˇ
+rpython:S117Ü"URename this parameter "isTopSide" to match the regular expression ^[_a-z][a-z0-9_]*$.(Óïûê˙ˇˇˇˇ
+<python:S125¸"Remove this commented out code.(™πÊ£˚ˇˇˇˇ
+<python:S125˛"Remove this commented out code.(ÄåÊêˇˇˇˇˇ
+<python:S125Ä"Remove this commented out code.(”£∞Î¯ˇˇˇˇ
+7python:S125–"Remove this commented out code.(êﬁ‚ˇ
+<python:S125Ë"Remove this commented out code.(Æí∞ñ˙ˇˇˇˇ
+<python:S125µ"Remove this commented out code.(„µ‚·˘ˇˇˇˇ
+7python:S125›"Remove this commented out code.(√§á√
+7python:S125ô"Remove this commented out code.(Ï¸∆¢

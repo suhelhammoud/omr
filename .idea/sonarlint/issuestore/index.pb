@@ -46,3 +46,5 @@ N
 src/notebooks/load_video.ipynb,b/d/bddff66dc3536a20da4f73c765d3b521887e3247
 S
 #src/notebooks/vertices_detection.py,f/2/f20d297ddde8305965cfe9ad8b76a79c8c71d022
+H
+src/notebooks/scanner.py,7/f/7f98cabe567b11594c5ef99a9b4dfb1371dc38eb

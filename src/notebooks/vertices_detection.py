@@ -44,16 +44,27 @@ def get_side(image, axis=1):
     raise GetSideException(f"Get Side Exception on axis={axis}")
 
 
-def get_vertex(image, axis):
+def get_vertex(image, axis, debug=False):
     side, side_nz, nz = get_side(image, axis)
-    point = get_max_distant_point(nz, side_nz)
-    return point[axis], point[1 - axis]
+    height, width = image.shape
+    a = np.array([nz[0], image.shape[1 - axis]])  # image.shape[1 - axis]
+    # a = np.array([nz[0], side_nz[0]])  # image.shape[1 - axis]
+    b = np.array([nz[-1], side_nz[-1]]) # [image.shape[axis]
+    point = get_max_distant_point(nz, side_nz, a, b)
+    result = (point[axis], point[1 - axis])
+    if debug:
+        plt.subplot(141), plt.imshow(image, 'gray'), plt.title(f'quarter axis={axis}')
+        plt.subplot(142), plt.plot(side), plt.title(f'side')
+        plt.subplot(143), plt.plot(side_nz), plt.title(f'side_nz')
+        plt.subplot(144), plt.plot(nz, side_nz, 'r'), plt.title(f'result {result}')
+        plt.show()
+    return result  # point[axis], point[1 - axis]
 
 
-def vertex(image):
+def vertex(image, debug=False):
     for axis in [1, 0]:
         try:
-            return get_vertex(image, axis=1)
+            return get_vertex(image, axis, debug)
         except GetSideException:
             logger.debug(f"GetSideException axis={axis}")
     raise GetSideException(f"Both V & H sides exceptions")
@@ -122,12 +133,20 @@ def vertices_stacked(vrtcs, height, width, h=None, w=None):
             (width - vrtcs[3][0], height - vrtcs[3][1])]
 
 
-def vertices(image):
+def vertices(image, debug=False):
     height, width = image.shape
     # h, w = int(height / 2), int(width / 2)
     # im_list = normalize_quarters(crop_to_four(image, h, w))
     im_list = normalize_quarters(crop_to_four(image))
-    vrtcs = [vertex(im) for im in im_list]
+    vrtcs = [vertex(im, debug) for im in im_list]
+    print(vrtcs)
+    if debug or True:
+        for idx, img in enumerate(im_list):
+            img = img.copy()
+            cv2.circle(img, vrtcs[idx], 50, (255, 255, 255), 5)
+            plt.subplot(221 + idx), plt.imshow(img, 'gray'), plt.title(f'q {idx + 1}')
+
+        plt.show()
     # return vertices_stacked(vrtcs, height, width, h, w)
     return vertices_stacked(vrtcs, height, width)
 
@@ -158,12 +177,13 @@ def transform(img, vertices, shape, show=False):
 
 
 def test():
-    file_path = '../../data/in2/05.jpg'
+    file_path = '../../data/in2/13.jpg'
     img = cv2.imread(file_path, 0)
     img_otsu = otsu_filter(img, blur_kernel=17)
-    vtcs = vertices(img_otsu)
+    vtcs = vertices(img_otsu, debug=False)
     print(vtcs)
-    transform(img, vtcs, (1000, 1500), show=True)
+    image_vis = transform(img, vtcs, (1000, 1500), show=True)
+    cv2.imwrite(f"../../data/out_vertices/{file_path[-6:]}", image_vis)
 
     # plt.subplot(121), plt.imshow(img, 'gray'), plt.title('img')
     # plt.subplot(122), plt.imshow(img_otsu, 'gray'), plt.title('img_otsu')
