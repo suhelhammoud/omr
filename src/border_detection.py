@@ -40,19 +40,19 @@ class V:
 """
 
 
-def get_page_vertical_sides(img):
+def get_page_vertical_sides(image):
     """
     Get the index of first and last none-zero values for each row in image 'img'
 
-    :param img: gray binary image
+    :param image: gray binary image
     :return ynz: y indexes where x have none-zero value
             l_side, r_side: x indexes for both sides
             forn abnoraml borders return None
     :raise NoBorderDetectedError
     """
-    height, width = img.shape
-    left_side = np.argmax(img, axis=1)
-    right_side = width - np.argmax(img[:, ::-1], axis=1)
+    height, width = image.shape
+    left_side = np.argmax(image, axis=1)
+    right_side = width - np.argmax(image[:, ::-1], axis=1)
     assert len(left_side) == len(right_side) == height
 
     ynz = np.nonzero(left_side)[0]
@@ -492,7 +492,7 @@ if __name__ == '__main__':
     # cv2.imwrite('../data/out/sheet.jpg', sheet)
 
     sheet_type_img = conf.sec_type.crop(sheet)
-    sheet_type = process_type(sheet_type_img, debug=False)
+    sheet_type = process_type(sheet_type_img, debug=True)
     sheet_id_img = conf.sec_id.crop(sheet)
     sheet_id_number = process_id(sheet_id_img, debug=True)
     # assert sheet_id_number == 7036093052

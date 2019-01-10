@@ -5,6 +5,13 @@ class VertexError(Exception):
     pass
 
 
+class GetSideException(Exception):
+    """
+    Could not get H/V side of image
+    """
+    pass
+
+
 class BorderError(Exception):
     """
     Could not find four vertices

@@ -1,26 +1,25 @@
 
-6python:S125"Remove this commented out code.(­™Áæ
-<python:S125‚"Remove this commented out code.(Ó£°ëøÿÿÿÿ
-7python:S125Ò"Remove this commented out code.(Þâÿ
-<python:S125ß"Remove this commented out code.(Ù–¨þÿÿÿÿ
-7python:S125"Remove this commented out code.(¡ÏÃ
-7python:S125›"Remove this commented out code.(ìüÆ¢
-<python:S125§"Remove this commented out code.(ô¬Ò™ûÿÿÿÿ
-<python:S125·"Remove this commented out code.(ãµâáùÿÿÿÿ
-7python:S125Ì"Remove this commented out code.(«£éæ
-<python:S125Ö"Remove this commented out code.(²ªÅÍÿÿÿÿÿ
-<python:S125Ù"Remove this commented out code.(ë†¤®ýÿÿÿÿ
-7python:S125ß"Remove this commented out code.(Ã¤‡Ã
-7python:S125ã"Remove this commented out code.(ÛÆè“
-<python:S125ê"Remove this commented out code.(®’°–úÿÿÿÿ
-<python:S125ÿ"Remove this commented out code.(ª¹æ£ûÿÿÿÿ
-<python:S125"Remove this commented out code.(€Œæÿÿÿÿÿ
-7python:S125"Remove this commented out code.(Å›©·
-<python:S125‘"Remove this commented out code.(Ä†ãÅûÿÿÿÿ
-7python:S125œ"Remove this commented out code.(Ã·Ó
-7python:S125¢"Remove this commented out code.(ñÉÎ§
-<python:S125©"Remove this commented out code.(îªÐáþÿÿÿÿ
-<python:S125´"Remove this commented out code.(ƒÇÞùÿÿÿÿ
-bpython:S101"FRename class "V" to match the regular expression ^[A-Z_][a-zA-Z0-9]+$.(Â™×ƒûÿÿÿÿ
-rpython:S117‡"URename this parameter "isTopSide" to match the regular expression ^[_a-z][a-z0-9_]*$.(î•žúÿÿÿÿ
-spython:S117‡"VRename this parameter "isLeftSide" to match the regular expression ^[_a-z][a-z0-9_]*$.(î•žúÿÿÿÿ
+7python:S125™"Remove this commented out code.(Ã·Ó
+<python:S125þ"Remove this commented out code.(€Œæÿÿÿÿÿ
+bpython:S101"FRename class "V" to match the regular expression ^[A-Z_][a-zA-Z0-9]+$.(Â™×ƒûÿÿÿÿ
+7python:S125™"Remove this commented out code.(ìüÆ¢
+<python:S125×"Remove this commented out code.(ë†¤®ýÿÿÿÿ
+7python:S125Ê"Remove this commented out code.(«£éæ
+7python:S125Ý"Remove this commented out code.(Ã¤‡Ã
+7python:S125Ð"Remove this commented out code.(Þâÿ
+<python:S125¥"Remove this commented out code.(ô¬Ò™ûÿÿÿÿ
+<python:S125Ž"Remove this commented out code.(Ä†ãÅûÿÿÿÿ
+<python:S125ü"Remove this commented out code.(ª¹æ£ûÿÿÿÿ
+<python:S125€"Remove this commented out code.(Ó£°ëøÿÿÿÿ
+7python:S125Ž"Remove this commented out code.(¡ÏÃ
+7python:S125Š"Remove this commented out code.(Å›©·
+<python:S125Ô"Remove this commented out code.(²ªÅÍÿÿÿÿÿ
+<python:S125µ"Remove this commented out code.(ãµâáùÿÿÿÿ
+<python:S125è"Remove this commented out code.(®’°–úÿÿÿÿ
+spython:S117†"VRename this parameter "isLeftSide" to match the regular expression ^[_a-z][a-z0-9_]*$.(î•žúÿÿÿÿ
+7python:S125á"Remove this commented out code.(ÛÆè“
+7python:S125Ÿ"Remove this commented out code.(ñÉÎ§
+<python:S125¦"Remove this commented out code.(îªÐáþÿÿÿÿ
+rpython:S117†"URename this parameter "isTopSide" to match the regular expression ^[_a-z][a-z0-9_]*$.(î•žúÿÿÿÿ
+<python:S125±"Remove this commented out code.(ƒÇÞùÿÿÿÿ
+<python:S125Ý"Remove this commented out code.(Ù–¨þÿÿÿÿ
